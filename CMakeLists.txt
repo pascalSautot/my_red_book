@@ -55,6 +55,7 @@ set(EXAMPLES
   03-instancing3
   03-pointsprites
   03-primitiverestart
+  03-scene
   03-xfb
   04-gouraud
   04-gouraud-float
