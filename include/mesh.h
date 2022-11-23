@@ -146,6 +146,7 @@ protected:
     GLfloat m_r;   // use in vertex shader to scale vertex coords
     vmath::vec4 m_position;    // use in vertex shader to translate vertex coords
     vmath::vec4 m_light_color;    
+    const GLfloat __pi;
     
 }; // class Sphere
 

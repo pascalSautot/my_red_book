@@ -3,7 +3,6 @@ using namespace mesh;
 
 #include <iostream>
 #include <iomanip>
-static const GLfloat __pi=3.1415926535897f;
 
 #include <cstdlib>
 
@@ -317,6 +316,7 @@ void ZXPlane::setData(void)
 }
 
 Sphere::Sphere(GLuint lat_count, GLuint long_count, GLfloat r):Mesh((lat_count-1)*(long_count-1)*6),
+    __pi(acos(0)*2.0f),
     m_lat_count(lat_count),m_long_count(long_count),m_r(r),
     m_deg_to_rad(__pi/180.0f),
     m_lat_inc((360.0f/(float)lat_count)*m_deg_to_rad),m_long_inc((360.0f/(float)long_count)*m_deg_to_rad),
