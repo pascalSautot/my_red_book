@@ -22,8 +22,9 @@ out vec4 vs_fs_color;
 
 void main(void)
 {
-    float rs= radius*sin(time)/3.0;
-    float rc= radius*cos(time)/3.0;
+    //float rs= radius*sin(time)/3.0;
+    float rs= radius*cos(time);
+    float rc= radius*cos(time)/4.0;
     float x=position.x*(1.0f+rc);
     float y=position.y*(1.0f+rs);
     float z=position.z*(1.0f+rc);

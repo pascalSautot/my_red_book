@@ -27,7 +27,6 @@ BEGIN_APP_DECLARATION(InstancingExample)
     virtual void Resize(int width, int height);
 
     // Member variables
-    GLuint update_prog;
     GLuint vao[2];
     GLuint vbo[2];
     GLuint xfb;
@@ -39,19 +38,35 @@ BEGIN_APP_DECLARATION(InstancingExample)
     GLfloat camera_rx,camera_ry,camera_rz;
     GLfloat frustrum_z_near_plane,frustrum_z_far_plane;
      
+    // armadillo VBM object
     GLuint color_vbo;
-    GLuint armadillo_prog,ref_prog,sphere_prog;
-
     GLuint geometry_tex;
+    GLuint geometry_xfb,particle_xfb;
 
-    GLuint geometry_xfb;
-    GLuint particle_xfb;
-
+    VBObject object;
+    GLuint armadillo_prog;
     GLint a_view_matrix_loc,a_model_matrix_loc,a_projection_matrix_loc;
+
+    // base planes and axes
+    SimpleObject ref_planes;
+    GLuint ref_prog;
     GLint ref_view_matrix_loc,ref_model_matrix_loc,ref_projection_matrix_loc;
+
+    // ponctual lights as sphere
+    mesh::Sphere sphere_light;
+    GLuint sphere_prog;
     GLint s_model_matrix_loc,s_view_matrix_loc,s_projection_matrix_loc,s_time_loc,s_radius_loc;
     GLfloat s_time,s_radius;
 
+    // robot as cylinders and axes
+    mesh::Cylinder cylinder;
+    GLuint cylinder_prog;
+    GLint c_model_matrix_loc,c_view_matrix_loc,c_projection_matrix_loc,c_time_loc,c_radius_loc,c_heigth_loc;
+    GLfloat c_time,c_radius,c_heigth;    
+    vmath::vec4 robotBaseLocation;
+    vmath::vec4 robotColor;
+    
+    // light models
     vmath::vec3 viewDirection;
     vmath::vec3 halfWayDirection;
 
@@ -66,11 +81,7 @@ BEGIN_APP_DECLARATION(InstancingExample)
     vmath::vec4 spotLightSourceColor;
     vmath::vec3 spotLightSourceDirection;
 
-#undef USE_UNIFORM_BLOCK
-#ifdef USE_UNIFORM_BLOCK
-    GLint lights_loc; // uniform block index
-    GLuint lightsUniformID; // data buffer name 
-#else
+
     GLint viewDirection_loc;
     GLint halfWayDirection_loc;
 
@@ -87,10 +98,7 @@ BEGIN_APP_DECLARATION(InstancingExample)
     vmath::vec4 a_lightColor, a_ambiantColor;
     vmath::vec4 a_lightPosition;
     vmath::vec3 a_lightDirection;
-#endif   
-    VBObject object;
-    SimpleObject ref_planes;
-    mesh::Sphere sphere_light;
+
 
     enum { vPositionLoc=0, vNormalIndexLoc=1, vTextureLoc=2, vInstanceColorLoc=3};    
     
@@ -98,11 +106,13 @@ protected:
     virtual bool InitArmadillo(void);
     virtual bool InitRef(void);
     virtual bool InitSphere(void);
+    virtual bool InitCylinder(void);
     virtual bool BuildShaders(ShaderInfo  *shaders, GLuint &prog, GLint &prog_model_matrix_loc, GLint &prog_view_matrix_loc, GLint &prog_projection_matrix_loc);
     virtual void ClearDisplay(void);
     virtual void DisplayRef(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix,  vmath::mat4 &projection_matrix);
     virtual void DisplayArmadillo(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix, vmath::mat4 &projection_matrix);
     virtual void DisplaySphere(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix,  vmath::mat4 & projection_matrix);
+    virtual void DisplayCylinder(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix,  vmath::mat4 & projection_matrix);
     virtual bool InstancingExample::FetchUniformVariables(GLint prog);
 END_APP_DECLARATION()
 
@@ -170,7 +180,8 @@ void InstancingExample::Initialize(const char * title)
     bool armadillo_status=InitArmadillo();
     bool ref_status=InitRef();
     bool s_status=InitSphere();
-    if( ! (armadillo_status&&ref_status&&s_status) ) exit(0);
+    bool c_status=InitCylinder();
+    if( ! (armadillo_status&&ref_status&&s_status&&c_status) ) exit(0);
 }
 size_t TypeSize(GLenum type)
 {
@@ -215,112 +226,58 @@ size_t TypeSize(GLenum type)
 bool InstancingExample::FetchUniformVariables(GLint prog)
 {
     bool status(true);
-#ifdef USE_UNIFORM_BLOCK     
-    enum {
-            ViewDirection, HalfWayDirection,
-            AbiantColor, 
-            PointLightSourceColor, PointLightSourcePosition, 
-            FarLightSourceColor, FarLightSourceDirection, 
-            SpotLightSourceColor, SpotLightSourceDirection,
-            NumUniforms
-        };
-    const char *uniformNames[NumUniforms]= {
-        "viewDirection","halfWayDirection",
-        "ambiantColor", 
-        "pointlightSourceColor", "pointLightSourcePosition", 
-        "farLightSourceColor", "farLightSourceDirection",
-        "spotLightSourceColor", "spotLightSourceDirection"        
-    };
-    GLuint indices[NumUniforms];       
-    GLint size[NumUniforms];       
-    GLint offset[NumUniforms];       
-    GLint type[NumUniforms]; 
-    GLvoid *data_ptr[NumUniforms]={
-        (GLvoid*)&viewDirection,
-        (GLvoid *)&halfWayDirection,
-        (GLvoid*)&ambiantColor,
-        (GLvoid*)&pointlightSourceColor,
-        (GLvoid*)&pointLightSourcePosition,
-        (GLvoid*)&farLightSourceColor,
-        (GLvoid*)&farLightSourceDirection,
-        (GLvoid*)&spotLightSourceColor,
-        (GLvoid*)&spotLightSourceDirection        
-    }; 
 
-    lights_loc= glGetUniformBlockIndex(armadillo_prog,"Lights");
-    if(lights_loc == -1 ){
-        std::cout << "lights block not fetched in shader" << std::endl;
+
+    ambiantColor_loc= glGetUniformLocation(armadillo_prog, "ambiantColor");
+    pointlightSourceColor_loc = glGetUniformLocation(armadillo_prog, "pointlightSourceColor");
+    pointLightSourcePosition_loc = glGetUniformLocation(armadillo_prog, "pointLightSourcePosition");
+    farLightSourceColor_loc = glGetUniformLocation(armadillo_prog, "farLightSourceColor");
+    farLightSourceDirection_loc = glGetUniformLocation(armadillo_prog, "farLightSourceDirection");
+    viewDirection_loc = glGetUniformLocation(armadillo_prog, "viewDirection");
+    /*
+    halfWayDirection_loc = glGetUniformLocation(armadillo_prog, "halfWayDirection");
+    spotLightSourceColor_loc= glGetUniformLocation(armadillo_prog, "spotLightSourceColor");
+    spotLightSourceDirection_loc = glGetUniformLocation(armadillo_prog, "spotLightSourceDirection"); 
+    */
+
+    if(ambiantColor_loc == -1 ){
+        std::cout << "ambiantColor not fetched in shader" << std::endl;
+        status=false;
+    }
+    if(pointlightSourceColor_loc == -1 ){
+        std::cout << "pointlightSourceColor not fetched in shader" << std::endl;
+        status=false;
+    }
+    if(pointLightSourcePosition_loc == -1 ){
+        std::cout << "pointLightSourcePosition not fetched in shader" << std::endl;
+        status=false;
+    }
+    if(farLightSourceColor_loc == -1 ){
+        std::cout << "farLightSourceColor not fetched in shader" << std::endl;
+        status=false;
+    }
+    if(farLightSourceDirection_loc == -1 ){
+        std::cout << "farLightSourceDirection not fetched in shader" << std::endl;
+        status=false;
+    }
+    if(viewDirection_loc == -1 ){
+        std::cout << "viewDirection not fetched in shader" << std::endl;
         status=false;
     }   
-    GLint block_size;
-    glGetActiveUniformBlockiv(prog,lights_loc,GL_UNIFORM_BLOCK_DATA_SIZE,&block_size); // size of the block 
-    GLvoid *data_buffer = malloc(block_size);
-    glGetUniformIndices(prog, NumUniforms, uniformNames, indices);
-    glGetActiveUniformsiv(prog, NumUniforms, indices, GL_UNIFORM_OFFSET, offset);
-    glGetActiveUniformsiv(prog, NumUniforms, indices, GL_UNIFORM_SIZE, size);
-    glGetActiveUniformsiv(prog, NumUniforms, indices, GL_UNIFORM_TYPE, type);
-    for ( int i=ViewDirection; i<NumUniforms; i++)
-    {
-        std::cout<< "name :" << uniformNames[i] << ", type: " << type[i] << ", size : " << size[i] << " * " << TypeSize(type[i]) << ", offset: " << offset[i] << std::endl;
-        memcpy((char *)data_buffer+offset[i],data_ptr[i],size[i]*TypeSize(type[i]));
-    }
-    glGenBuffers(1,&lightsUniformID);  
-    glBindBuffer(GL_UNIFORM_BUFFER,lightsUniformID); // data buffer object to pass on value to the uniform block
-    glBufferData(GL_UNIFORM_BUFFER,block_size,data_buffer,GL_STATIC_DRAW);
-    glBindBufferBase(GL_UNIFORM_BUFFER,lights_loc,lightsUniformID);
-#else
-
-        ambiantColor_loc= glGetUniformLocation(armadillo_prog, "ambiantColor");
-        pointlightSourceColor_loc = glGetUniformLocation(armadillo_prog, "pointlightSourceColor");
-        pointLightSourcePosition_loc = glGetUniformLocation(armadillo_prog, "pointLightSourcePosition");
-        farLightSourceColor_loc = glGetUniformLocation(armadillo_prog, "farLightSourceColor");
-        farLightSourceDirection_loc = glGetUniformLocation(armadillo_prog, "farLightSourceDirection");
-        viewDirection_loc = glGetUniformLocation(armadillo_prog, "viewDirection");
-        /*
-        halfWayDirection_loc = glGetUniformLocation(armadillo_prog, "halfWayDirection");
-        spotLightSourceColor_loc= glGetUniformLocation(armadillo_prog, "spotLightSourceColor");
-        spotLightSourceDirection_loc = glGetUniformLocation(armadillo_prog, "spotLightSourceDirection"); 
-        */
-
-        if(ambiantColor_loc == -1 ){
-            std::cout << "ambiantColor not fetched in shader" << std::endl;
-            status=false;
-        }
-        if(pointlightSourceColor_loc == -1 ){
-            std::cout << "pointlightSourceColor not fetched in shader" << std::endl;
-            status=false;
-        }
-        if(pointLightSourcePosition_loc == -1 ){
-            std::cout << "pointLightSourcePosition not fetched in shader" << std::endl;
-            status=false;
-        }
-        if(farLightSourceColor_loc == -1 ){
-            std::cout << "farLightSourceColor not fetched in shader" << std::endl;
-            status=false;
-        }
-        if(farLightSourceDirection_loc == -1 ){
-            std::cout << "farLightSourceDirection not fetched in shader" << std::endl;
-            status=false;
-        }
-        if(viewDirection_loc == -1 ){
-            std::cout << "viewDirection not fetched in shader" << std::endl;
-            status=false;
-        }   
-        /*
-        if(halfWayDirection_loc == -1 ){
-            std::cout << "halfWayDirection not fetched in shader" << std::endl;
-            status=false;
-        }   
-        if(spotLightSourceColor_loc == -1 ){
-            std::cout << "spotLightSourceColor not fetched in shader" << std::endl;
-            status=false;
-        } 
-        if(spotLightSourceDirection_loc == -1 ){
-            std::cout << "spotLightSourceDirection not fetched in shader" << std::endl;
-            status=false;
-        }   
-        */                           
-#endif    
+    /*
+    if(halfWayDirection_loc == -1 ){
+        std::cout << "halfWayDirection not fetched in shader" << std::endl;
+        status=false;
+    }   
+    if(spotLightSourceColor_loc == -1 ){
+        std::cout << "spotLightSourceColor not fetched in shader" << std::endl;
+        status=false;
+    } 
+    if(spotLightSourceDirection_loc == -1 ){
+        std::cout << "spotLightSourceDirection not fetched in shader" << std::endl;
+        status=false;
+    }   
+    */                           
     return status;
 }
 bool InstancingExample::InitArmadillo()
@@ -330,11 +287,7 @@ bool InstancingExample::InitArmadillo()
     ShaderInfo  shaders[] =
     {
         { GL_VERTEX_SHADER, "media/shaders/scene/model_view_transform.vert" },
-#ifdef USE_UNIFORM_BLOCK
-        { GL_FRAGMENT_SHADER, "media/shaders/scene/lighting-uniform-block.frag" },
-#else
         { GL_FRAGMENT_SHADER, "media/shaders/scene/lighting.frag" },
-#endif
         { GL_NONE, NULL }
     };
     bool status=InstancingExample::BuildShaders(shaders,armadillo_prog,a_model_matrix_loc,a_view_matrix_loc,a_projection_matrix_loc);
@@ -429,7 +382,7 @@ bool InstancingExample::InitSphere()
     // load shaders in program
     ShaderInfo  shaders[] =
     {
-        { GL_VERTEX_SHADER, "media/shaders/scene/pulsating-sphere.vert" },
+        { GL_VERTEX_SHADER, "media/shaders/scene/model_view_transform_sphere.vert" },
         { GL_FRAGMENT_SHADER, "media/shaders/scene/no-lighting.frag" },
         { GL_NONE, NULL }
     };
@@ -447,14 +400,58 @@ bool InstancingExample::InitSphere()
             status=false;
         }        
     }
-/*
-        FetchUniformVariables(sphere_prog);
-*/
     if(status){
         sphere_light.setColor(pointlightSourceColor);
         sphere_light.setPosition(pointLightSourcePosition);
         sphere_light.setRadius(0.25f); //1.0f/16.0f);
         sphere_light.setData();
+    }
+
+    return status;    
+}
+bool InstancingExample::InitCylinder()
+{
+    // Create the program for rendering the model
+    // load shaders in program
+    ShaderInfo  shaders[] =
+    {
+        { GL_VERTEX_SHADER, "media/shaders/scene/model_view_transform_cylinder.vert" },
+        { GL_FRAGMENT_SHADER, "media/shaders/scene/no-lighting.frag" },
+        { GL_NONE, NULL }
+    };
+    
+    bool status=InstancingExample::BuildShaders(shaders,
+                    cylinder_prog,
+                    c_model_matrix_loc,c_view_matrix_loc,c_projection_matrix_loc);
+    if(status){
+        
+        std::string name="time";
+        c_time_loc = glGetUniformLocation(cylinder_prog, name.c_str());
+        if(c_time_loc == -1 ){
+            std::cout << name << " not fetched in shader" << std::endl;
+            status=false;
+        }
+        name = "radius";
+        c_radius_loc = glGetUniformLocation(cylinder_prog, name.c_str());
+        if(c_radius_loc == -1 ){
+            std::cout << name << " not fetched in shader" << std::endl;
+            status=false;
+        }   
+        name="heigth";
+        c_heigth_loc = glGetUniformLocation(cylinder_prog, name.c_str());
+        if(c_heigth_loc == -1 ){
+            std::cout << name << " not fetched in shader" << std::endl;
+            status=false;
+        }             
+    }
+    if(status){
+        robotBaseLocation= { 1.0f, 0.f, 0.f, 1.0f};
+        robotColor= { 0.8f, 0.8f, 0.8f, 1.0f};
+        cylinder.setColor(robotColor);
+        cylinder.setPosition(robotBaseLocation);
+        cylinder.setRadius(0.25f); 
+        cylinder.setHeigth(0.5f); 
+        cylinder.setData();
     }
 
     return status;    
@@ -474,17 +471,13 @@ void InstancingExample::DisplayArmadillo(
 {      
     // Activate instancing program
     glUseProgram(armadillo_prog);
-#ifdef USE_UNIFORM_BLOCK     
-    /* FetchUniformVariables(sphere_prog);    */
-#else
 
     glUniform4fv(ambiantColor_loc,1,ambiantColor);
     glUniform4fv(pointlightSourceColor_loc,1,pointlightSourceColor);
     glUniform4fv(farLightSourceColor_loc,1,farLightSourceColor);
 
     //glUniform3fv(halfWayDirection_loc,1,halfWayDirection);
-    
-#endif
+
     float tt= (3000.0f*t);
 
     const VBM_BOUNDING_BOX & bb= object.BoundingBox();
@@ -577,10 +570,35 @@ void InstancingExample::DisplaySphere(bool auto_redraw,GLfloat t, vmath::mat4 &v
 
     //render axes
     sphere_light.render();
- 
 
     glUseProgram(0);
+}
 
+void InstancingExample::DisplayCylinder(bool auto_redraw,GLfloat t, vmath::mat4 &view_matrix,  vmath::mat4 & projection_matrix)
+{
+    // Activate instancing program
+    glUseProgram(cylinder_prog);
+
+    //projection_matrix=(vmath::frustum(left_side,right_side, bottom, top, near_plane, far_plane) * vmath::translate(0.0f, 0.0f, -1000.0f));
+    GLfloat scale(cylinder.Radius());
+    vmath::vec3 translation(cylinder.Position());
+    vmath::mat4 model_matrix =  vmath::mat4::identity() *
+                    vmath::translate(translation) *
+                    vmath::scale(scale);  
+    // pass on matrices 
+    glUniformMatrix4fv(c_model_matrix_loc, 1, GL_FALSE, model_matrix);
+    glUniformMatrix4fv(c_view_matrix_loc, 1, GL_FALSE, view_matrix);
+    glUniformMatrix4fv(c_projection_matrix_loc, 1, GL_FALSE, projection_matrix);
+    float tt= (1000.0f*t);
+
+    glUniform1f(c_time_loc, tt);
+    glUniform1f(c_radius_loc, cylinder.Radius());
+    glUniform1f(c_heigth_loc, cylinder.Heigth());
+
+    //render axes
+    cylinder.render();
+
+    glUseProgram(0);
 }
 
 void InstancingExample::DisplayRef(bool auto_redraw, float t, vmath::mat4 &view_matrix,  vmath::mat4 & projection_matrix)
@@ -606,7 +624,6 @@ void InstancingExample::DisplayRef(bool auto_redraw, float t, vmath::mat4 &view_
     zx_plane.render();     
 
     glUseProgram(0);
-
 }
 void InstancingExample::Display(bool auto_redraw)
 {
@@ -622,12 +639,10 @@ void InstancingExample::Display(bool auto_redraw)
                                     vmath::rotate(view_angle, 1.0f, 0.0f, 0.0f) *
                                     vmath::rotate(-view_angle, 0.0f, 1.0f, 1.0f) ;  
 
-
     vmath::mat4 side_view_matrix =   
                                 vmath::rotate(-tt/2.0f, 0.0f, 1.0f, 0.0f) *
                                 vmath::rotate(view_angle, 1.0f, 0.0f, 0.0f) *
                                 vmath::rotate(-view_angle, 0.0f, 1.0f, 1.0f);  // rotate around Y axis
-  
     
     const float right   = 1.0f;
     const float left    = -right;
@@ -640,9 +655,11 @@ void InstancingExample::Display(bool auto_redraw)
             frustrum_z_near_plane,frustrum_z_far_plane) * 
         vmath::translate(camera_tx,camera_ty,camera_tz);   
 
-    DisplayArmadillo(   auto_redraw,t,top_view_matrix,projection_matrix);
-    DisplayRef(         auto_redraw,t,top_view_matrix,projection_matrix);
-    DisplaySphere(      auto_redraw,t,top_view_matrix,projection_matrix);
+    vmath::mat4 &view_matrix= top_view_matrix;
+    DisplayArmadillo(   auto_redraw,t,view_matrix,projection_matrix);
+    DisplayRef(         auto_redraw,t,view_matrix,projection_matrix);
+    DisplaySphere(      auto_redraw,t,view_matrix,projection_matrix);
+    DisplayCylinder(    auto_redraw,t,view_matrix,projection_matrix);
 
     base::Display();
 }
@@ -651,6 +668,8 @@ void InstancingExample::Finalize(void)
     glUseProgram(0);
     if(ref_prog)glDeleteProgram(ref_prog);
     if(armadillo_prog)glDeleteProgram(armadillo_prog);
+    if(sphere_prog)glDeleteProgram(sphere_prog);
+    if(cylinder_prog)glDeleteProgram(cylinder_prog);
     glDeleteVertexArrays(2, vao);
     glDeleteBuffers(2, vbo);
 }
@@ -659,6 +678,5 @@ void InstancingExample::Resize(int width, int height)
 {
     const int w(width), h(height);
     glViewport(0, 0 , w, h);
-
     camera_aspect_ratio = float(h) / float(w);
 }

@@ -41,7 +41,7 @@ protected:
     GLint m_data_c_offset;
     GLint m_data_n_offset;
 
-    const GLuint m_nelem;
+    GLuint m_nelem;
     const GLuint m_ndim;
     GLuint m_ndataset; // vertex? normal? color ?    
 };
@@ -114,41 +114,76 @@ public:
     void setData(void);
 };
 
-class Sphere : public Mesh 
+class Quadric : public Mesh 
 {
 public:
-    Sphere(GLuint lat_count=36, GLuint long_count=36, GLfloat r=1.0);
+    Quadric(GLuint lat_count=36, GLuint long_count=36, GLfloat r=1.0);
+    virtual ~Quadric();
+
     void setPosition(vmath::vec4 &position){m_position=position;}
+    vmath::vec3 Position()const{return vmath::vec3(m_position[0],m_position[1],m_position[2]);}
+
     void setRadius(GLfloat r){m_r=r;}
+    GLfloat Radius()const{return m_r;}     
+
     void setColor(vmath::vec4 &color){m_light_color=color;}
-    virtual ~Sphere();
     void render(void);
 
     void setData(void);
-
-   vmath::vec3 Position()const{return vmath::vec3(m_position[0],m_position[1],m_position[2]);}
-   GLfloat Radius()const{return m_r;}     
-
 protected:
 #ifdef _DEBUG
     void debug(const std::string &s);
 #endif  
- 
-    //compute triangles for two succesive latitude angular increments
-    void PatchCoordinates(GLuint la, GLuint lo, GLuint& dv); 
-    //compute triangle for couple angles
-    void SphericalCoordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const;
     void bind_data(GLint buffer_size);
-
+ 
+    //compute triangles for two successive latitude increments
+    void PatchCoordinates(GLuint la, GLuint lo, GLuint& dv);  
+    //compute triangle for couple indices
+    virtual void Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const=0;
     GLuint m_lat_count,m_long_count;    
+    const GLfloat __pi;
     const GLfloat m_deg_to_rad;  
     GLfloat m_lat_inc,m_long_inc;
-    GLfloat m_r;   // use in vertex shader to scale vertex coords
     vmath::vec4 m_position;    // use in vertex shader to translate vertex coords
     vmath::vec4 m_light_color;    
-    const GLfloat __pi;
-    
+    GLfloat m_r;   // use in vertex shader to scale vertex coords    
+}; // class Quadric
+
+class Sphere : public Quadric 
+{
+public:
+    Sphere(GLuint lat_count=36, GLuint long_count=36, GLfloat r=1.0);
+    virtual ~Sphere();
+    void setData(void);
+protected:
+    //compute triangle for couple angles
+    void Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const;
 }; // class Sphere
+
+class Cylinder : public Quadric 
+{
+public:
+    //Cylinder(GLuint lat_count=36, GLuint long_count=36, GLfloat r=1.0, GLfloat h=1.0);
+    Cylinder(GLuint lat_count=4, GLuint long_count=4, GLfloat r=1.0, GLfloat h=1.0);
+    virtual ~Cylinder();
+
+    void setRadius(GLfloat r){m_r=r;}
+    GLfloat Radius()const{return m_r;}   
+    void setHeigth(GLfloat h){m_h=h;}
+    GLfloat Heigth()const{return m_h;}   
+
+    void setData(void);
+
+protected:
+
+    //compute triangle for couple angles
+    void Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const;
+ 
+    GLfloat m_h;
+    GLuint Nelem(void)const{ return(m_nelem_cyl*6+(2*m_nelem_lid)*3);}
+    GLuint m_nelem_cyl,m_nelem_lid; // to be used by Nelem 
+
+}; // class Cyclinder
 
 }; //namespace mesh
 

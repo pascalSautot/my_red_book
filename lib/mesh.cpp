@@ -315,71 +315,51 @@ void ZXPlane::setData(void)
     bind_data(buffer_size);
 }
 
-Sphere::Sphere(GLuint lat_count, GLuint long_count, GLfloat r):Mesh((lat_count-1)*(long_count-1)*6),
+Quadric::Quadric(GLuint lat_count, GLuint long_count, GLfloat r):Mesh(lat_count*long_count*6),
     __pi(acos(0)*2.0f),
-    m_lat_count(lat_count),m_long_count(long_count),m_r(r),
+    m_lat_count(lat_count),m_long_count(long_count),
     m_deg_to_rad(__pi/180.0f),
     m_lat_inc((360.0f/(float)lat_count)*m_deg_to_rad),m_long_inc((360.0f/(float)long_count)*m_deg_to_rad),
-    m_position()
+    m_position(),
+    m_r(r)    
 {
     m_data_v_offset=0;
     m_data_c_offset=m_nelem;
     m_data_n_offset= 2*m_nelem;   
     m_ndataset =(  (int)(m_data_v_offset != -1) + (int)(m_data_c_offset != -1) + (int)(m_data_n_offset != -1) );
-    for(int k=0;k<4;k++)m_light_color[k]=1.0f;
+    for(int k=0;k<4;k++)m_light_color[k]=1.0f;        
 }
-Sphere::~Sphere(){}
-void Sphere::render(void)
+Quadric::~Quadric(){}
+
+void Quadric::render(void)
 {
     glBindVertexArray( m_VAO );
     glDrawArrays( GL_TRIANGLES,  0, m_nelem );  
 }
-
-
-
-// given m_lat_count x m_long_count values  lat_i and long_j are the ith and jth vertex 
-// i in [0,m_lat_count[ 
-// j in [0,m_long_count]
-// Compute coordinates for a point at latitude v*m_lat_inc and longitude long_j*m_long_inc for a unit radius sphere.
-void Sphere::SphericalCoordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const
-{
-    //la in [0;m_lat_count-1[  => u in 0;m_lat_inc*(m_lat_count-2)
-    //lo in [0;m_long_count-1[     
-    const GLfloat u=((GLfloat)lat_i)*m_lat_inc;
-    const GLfloat v=((GLfloat)long_j)*m_long_inc;
-#ifdef _DEBUG
-    std::cout << "(u,v) = " << std::setprecision(5) << u << " ,"  << v << std::endl;
-#endif    
-    P[0]= std::cos(u)*sin(v);
-    P[1]= std::cos(v);
-    P[2]= std::sin(u)*sin(v);
-    P[3] = 1.0f; 
-}
-void Sphere::PatchCoordinates(GLuint la, GLuint lo, GLuint& dv)
+void Quadric::PatchCoordinates(GLuint la, GLuint lo, GLuint& dv)
 {
     //define triangle Pla1,Pla2,Plo2 (3 vertices) 0,1,2
     vmath::vec4 &Pla1(m_vertex[dv]),&Pla2(m_vertex[dv+1]),&Plo2(m_vertex[dv+2]);
-    SphericalCoordinates(la,  lo,  Pla1);
-    SphericalCoordinates(la+1,lo,  Pla2);
-    SphericalCoordinates(la+1,lo+1,Plo2);
+    Coordinates(la,  lo,  Pla1);
+    Coordinates(la+1,lo,  Pla2);
+    Coordinates(la+1,lo+1,Plo2);
 
     //define triangle Pla1,Plo2,Plo1 (3 vertices) 0,2,3
     m_vertex[dv+3]=Pla1;
     m_vertex[dv+4]=Plo2;
     vmath::vec4 &Plo1(m_vertex[dv+5]);
-    SphericalCoordinates(la,  lo+1,Plo1);
+    Coordinates(la,  lo+1,Plo1);
 
     dv+=6; //m_vertex[dv+5]=Plo1; //already computed
-
 }
-void Sphere::setData(void)
+void Quadric::setData(void)
 {
     // define data
     vmath::vec4 Pla1,Pla2,Plo1,Plo2;
     //the following double loop creates (m_lat_count-1)x(m_long_count-1)x6 vertices
     GLuint dv=0;
-    const GLuint la_max=m_lat_count-1;
-    const GLuint long_max=m_long_count-1;
+    const GLuint la_max=m_lat_count;
+    const GLuint long_max=m_long_count;
     for(GLuint  la=0; la<la_max; la++)    
     {
         for(GLuint  lo=0; lo<long_max; lo++) 
@@ -389,19 +369,13 @@ void Sphere::setData(void)
     }  
     for(GLuint  i=0; i<m_nelem; i++)    
     {
-        m_normal[i]=m_vertex[i];
         m_color[i]=m_light_color;
-    }
-
-
-#ifdef _DEBUG
-    debug(std::string("Sphere"));
-#endif    
+    }    
     GLint buffer_size = sizeof(GLfloat)*m_nelem*m_ndim*m_ndataset;
     bind_data(buffer_size);
 }
 // bind data using 3 different location on shader : vPosition, vColor, vNormal 
-void Sphere::bind_data(GLint buffer_size) //refactor and use this method as a generic method setData  and call bind_data
+void Quadric::bind_data(GLint buffer_size) //refactor and use this method as a generic method setData  and call bind_data
 {
     glGenVertexArrays( 1, &m_VAO );
     glBindVertexArray( m_VAO );        
@@ -444,10 +418,9 @@ void Sphere::bind_data(GLint buffer_size) //refactor and use this method as a ge
 
     glBindBuffer( GL_ARRAY_BUFFER, 0 );
     glBindVertexArray(0);    
-
 }
 #ifdef _DEBUG
-void Sphere::debug(const std::string &s)
+void Quadric::debug(const std::string &s)
 {
     std::cout << s.c_str() << std::endl;
 
@@ -484,3 +457,135 @@ void Sphere::debug(const std::string &s)
 
 }
 #endif  
+Sphere::Sphere(GLuint lat_count, GLuint long_count, GLfloat r):Quadric(lat_count,long_count,r)
+{
+    m_lat_inc=(360.0f/(float)lat_count)*m_deg_to_rad;
+    m_long_inc=(360.0f/(float)long_count)*m_deg_to_rad;
+}
+Sphere::~Sphere(){}
+
+// given m_lat_count x m_long_count values  lat_i and long_j are the ith and jth vertex 
+// i in [0,m_lat_count[ 
+// j in [0,m_long_count]
+// Compute coordinates for a point at latitude v*m_lat_inc and longitude long_j*m_long_inc for a unit radius sphere.
+void Sphere::Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const
+{
+    //la in [0;m_lat_count-1[  => u in 0;m_lat_inc*(m_lat_count-2)
+    //lo in [0;m_long_count-1[     
+    const GLfloat u=((GLfloat)lat_i)*m_lat_inc;
+    const GLfloat v=((GLfloat)long_j)*m_long_inc;
+#ifdef _DEBUG
+    std::cout << "(u,v) = " << std::setprecision(5) << u << " ,"  << v << std::endl;
+#endif    
+    const float cu= cos(u);
+    const float su= sin(u);
+    const float cv= cos(v);
+    const float sv= sin(v);
+
+    P[0]= cv*su; //X
+    P[1]= sv;    //Y
+    P[2]= cu*cv; //Z
+    P[3] = 1.0f; 
+    
+}
+void Sphere::setData(void)
+{
+    Quadric::setData();
+#ifdef _DEBUG
+    debug(std::string("Sphere"));
+#endif    
+    for(GLuint  i=0; i<m_nelem; i++)    
+    {
+        m_normal[i]=m_vertex[i];
+    }    
+}
+Cylinder::Cylinder(GLuint lat_count, GLuint long_count, GLfloat r, GLfloat h):Quadric(lat_count,long_count,r),m_h(h),
+    m_nelem_cyl(lat_count*long_count),m_nelem_lid(lat_count) 
+{
+    m_lat_count=lat_count;
+    m_long_count=long_count;
+
+    m_nelem= Nelem();
+
+    if(m_nelem)
+    {
+        if(m_vertex) delete [] m_vertex; m_vertex= new VertexCoord[m_nelem];
+        if(m_color) delete [] m_color; m_color= new VertexColor[m_nelem];
+        if(m_normal) delete [] m_normal; m_normal= new VertexColor[m_nelem];
+    }    
+    m_data_v_offset=0;
+    m_data_c_offset=m_nelem;
+    m_data_n_offset= 2*m_nelem;   
+    m_ndataset =(  (int)(m_data_v_offset != -1) + (int)(m_data_c_offset != -1) + (int)(m_data_n_offset != -1) );
+
+    m_lat_inc=(360.0f/(float)lat_count)*m_deg_to_rad;
+    m_long_inc=(m_h/(float)long_count);    
+}
+Cylinder::~Cylinder(){}
+
+// given m_lat_count x m_long_count values  lat_i and long_j are the ith and jth vertex 
+// i in [0,m_lat_count[ 
+// j in [0,m_long_count]
+// Compute coordinates for a point at latitude v*m_lat_inc and longitude long_j*m_long_inc for a unit radius sphere.
+void Cylinder::Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const
+{
+    //la in [0;m_lat_count-1[  => u in 0;m_lat_inc*(m_lat_count-2)
+    //lo in [0;m_long_count-1[     
+    const GLfloat u=((GLfloat)lat_i)*m_lat_inc;
+    const GLfloat v=((GLfloat)long_j)*m_long_inc; //here long designate heigth
+#ifdef _DEBUG
+    std::cout << "(u,v) = " << std::setprecision(5) << u << " ,"  << v << std::endl;
+#endif    
+    const float cu= cos(u);
+    const float su= sin(u);
+
+    P[0]= su;    //X
+    P[1]= v*m_h; //Y
+    P[2]= cu;    //Z
+    P[3] = 1.0f; 
+}
+void Cylinder::setData(void)
+{
+    //cylinder surface
+    Quadric::setData();
+
+    //upper and lower lids
+    //the following double loop creates (m_lat_count-1)x(m_long_count-1)x6 vertices
+    const GLuint n=m_nelem_cyl*6;
+    GLuint dv=n;
+    const GLuint la_max=m_lat_count;
+    const GLuint long_max=m_long_count;
+    for(GLuint i=0,lo=0;i<2;i++,lo+=long_max)
+    {
+        std::cout << "lid heigth = " << lo << std::endl;
+        for(GLuint  la=0; la<la_max; la++)    
+        {
+            //define triangle Pl1,Pl2,Pl3 (3 vertices) 0,1,2
+            vmath::vec4 &Pl1(m_vertex[dv]),&Pl2(m_vertex[dv+1]),&Pl3(m_vertex[dv+2]);
+            Coordinates(la,  lo,  Pl1);
+            Coordinates(la+1,lo,  Pl2);
+            for(GLuint k=0;k<wDim;k++)Pl3[k]=0.0f;Pl3[yDim]=Pl2[yDim];Pl3[wDim]=1.0f;
+#ifdef _DEBUG            
+            for(GLuint k=0;k<3;k++)
+            {
+                std::cout << "[id](x,y,z) = [" << dv+k << "](";
+                for(GLuint l=0;l<wDim;l++)
+                {
+                    std::cout << std::setprecision(5) << m_vertex[dv+k][l];
+                    if(l<wDim-1)std::cout << ", ";
+                }
+                std::cout << ")" << std::endl;
+            }
+#endif            
+            dv+=3;         
+        }  
+    }
+
+#ifdef _DEBUG
+    debug(std::string("Sphere"));
+#endif        
+    for(GLuint  i=0; i<m_nelem; i++)    
+    {
+        m_normal[i]=m_vertex[i];
+    }    
+}
