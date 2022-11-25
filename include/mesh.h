@@ -59,6 +59,7 @@ protected:
     void bind_data(GLint buffer_size);
 
 };
+
 class XAxis : public Axis 
 {
 public:
@@ -163,8 +164,7 @@ protected:
 class Cylinder : public Quadric 
 {
 public:
-    //Cylinder(GLuint lat_count=36, GLuint long_count=36, GLfloat r=1.0, GLfloat h=1.0);
-    Cylinder(GLuint lat_count=4, GLuint long_count=4, GLfloat r=1.0, GLfloat h=1.0);
+    Cylinder(GLuint lat_count=36, GLuint long_count=36, GLfloat r=1.0, GLfloat h=1.0);
     virtual ~Cylinder();
 
     void setRadius(GLfloat r){m_r=r;}
@@ -184,6 +184,25 @@ protected:
     GLuint m_nelem_cyl,m_nelem_lid; // to be used by Nelem 
 
 }; // class Cyclinder
+
+class OrientedAxis : public Axis
+{
+public:
+    OrientedAxis(vmath::vec3 &base, vmath::vec3 &tip);
+    virtual ~OrientedAxis();
+    void setData(void);
+protected:
+    vmath::vec3 m_base,m_tip,m_axis;
+};
+class RobotAxis 
+{
+public:
+    RobotAxis(vmath::vec3 &base, vmath::vec3 &tip, GLfloat r=1.0, GLfloat length=1.0);
+    virtual ~RobotAxis();
+protected:
+    Cylinder *cylinder;
+    OrientedAxis *axis;    
+};
 
 }; //namespace mesh
 

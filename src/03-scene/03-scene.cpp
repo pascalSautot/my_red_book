@@ -655,7 +655,7 @@ void InstancingExample::Display(bool auto_redraw)
             frustrum_z_near_plane,frustrum_z_far_plane) * 
         vmath::translate(camera_tx,camera_ty,camera_tz);   
 
-    vmath::mat4 &view_matrix= top_view_matrix;
+    vmath::mat4 &view_matrix= side_view_matrix;
     DisplayArmadillo(   auto_redraw,t,view_matrix,projection_matrix);
     DisplayRef(         auto_redraw,t,view_matrix,projection_matrix);
     DisplaySphere(      auto_redraw,t,view_matrix,projection_matrix);

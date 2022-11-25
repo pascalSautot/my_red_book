@@ -371,8 +371,6 @@ void Quadric::setData(void)
     {
         m_color[i]=m_light_color;
     }    
-    GLint buffer_size = sizeof(GLfloat)*m_nelem*m_ndim*m_ndataset;
-    bind_data(buffer_size);
 }
 // bind data using 3 different location on shader : vPosition, vColor, vNormal 
 void Quadric::bind_data(GLint buffer_size) //refactor and use this method as a generic method setData  and call bind_data
@@ -491,6 +489,8 @@ void Sphere::Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const
 void Sphere::setData(void)
 {
     Quadric::setData();
+    GLint buffer_size = sizeof(GLfloat)*m_nelem*m_ndim*m_ndataset;
+    bind_data(buffer_size);    
 #ifdef _DEBUG
     debug(std::string("Sphere"));
 #endif    
@@ -546,6 +546,7 @@ void Cylinder::Coordinates(GLuint lat_i, GLuint long_j, vmath::vec4& P)const
 }
 void Cylinder::setData(void)
 {
+
     //cylinder surface
     Quadric::setData();
 
@@ -580,7 +581,8 @@ void Cylinder::setData(void)
             dv+=3;         
         }  
     }
-
+    GLint buffer_size = sizeof(GLfloat)*m_nelem*m_ndim*m_ndataset;
+    bind_data(buffer_size);
 #ifdef _DEBUG
     debug(std::string("Sphere"));
 #endif        
@@ -588,4 +590,41 @@ void Cylinder::setData(void)
     {
         m_normal[i]=m_vertex[i];
     }    
+}
+OrientedAxis::OrientedAxis(vmath::vec3 &base, vmath::vec3 &tip):Axis(),m_base(base),m_tip(tip),m_axis(tip-base)
+{}
+OrientedAxis::~OrientedAxis()
+{}
+
+void OrientedAxis::setData(void)
+{
+    GLfloat v[2][4];
+    for(GLuint k=0;k<wDim;k++)
+    {
+        v[0][k]=m_base[k];
+        v[1][k]=m_tip[k];
+    }
+    v[0][wDim]=v[1][wDim]=1.0f;
+
+    const GLfloat c[2][4]={
+        { 1.0f, 1.0f, 1.0f, 1 }, //color
+        { 1.0f, 1.0f, 1.0f, 1 } //color
+    };
+    push_data(v,c);
+#ifdef _DEBUG
+    debug(std::string("Axis"));
+#endif       
+    GLint buffer_size = sizeof(GLfloat)*m_nelem*m_ndim*2;
+    bind_data(buffer_size);
+
+}
+
+RobotAxis::RobotAxis(vmath::vec3 &base, vmath::vec3 &tip, GLfloat r, GLfloat length):
+    cylinder(new Cylinder(36,36,r,length)),
+    axis(new OrientedAxis(base,tip))
+{}
+RobotAxis::~RobotAxis()
+{
+    if(cylinder)delete cylinder;
+    if(axis)delete axis;
 }
