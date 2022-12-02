@@ -523,15 +523,15 @@ void InstancingExample::DisplayArmadillo(
     fLSD= fLSD * view_matrix;
     vmath::vec3 fLSD3;
     for(int k=0;k<3;k++)fLSD3[k]=fLSD[k];
-/*
+
     vmath::vec4 vD= { viewDirection[0], viewDirection[1], viewDirection[2], 0.0f};
     vD= vD * view_matrix;
     vmath::vec3 vD3;
     for(int k=0;k<3;k++)vD3[k]=vD[k];
-*/
-    glUniform4fv(pointLightSourcePosition_loc,1,pointLightSourcePosition);
+
+    glUniform4fv(pointLightSourcePosition_loc,1,pLSP);
     glUniform3fv(farLightSourceDirection_loc,1,fLSD3);
-    glUniform3fv(viewDirection_loc,1,viewDirection);
+    glUniform3fv(viewDirection_loc,1,vD3);
 /*
     glUniform4fv(pointLightSourcePosition_loc,1,pLSP);
     glUniform3fv(farLightSourceDirection_loc,1,farLightSourceDirection);
@@ -655,7 +655,7 @@ void InstancingExample::Display(bool auto_redraw)
             frustrum_z_near_plane,frustrum_z_far_plane) * 
         vmath::translate(camera_tx,camera_ty,camera_tz);   
 
-    vmath::mat4 &view_matrix= side_view_matrix;
+    vmath::mat4 &view_matrix= top_view_matrix;
     DisplayArmadillo(   auto_redraw,t,view_matrix,projection_matrix);
     DisplayRef(         auto_redraw,t,view_matrix,projection_matrix);
     DisplaySphere(      auto_redraw,t,view_matrix,projection_matrix);

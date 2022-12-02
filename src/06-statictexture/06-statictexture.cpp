@@ -31,83 +31,134 @@ BEGIN_APP_DECLARATION(LoadTextureExample)
     GLuint quad_vbo;
 
     GLuint tex;
+    enum AttribIndex { VertexCoordID, TextureCoordID, MaxAttrib};
+    enum dataSize { vertexCoordCount =4, textureCoordCount=4};
+
+protected:
+    void InitializeShaders(void);
+
 END_APP_DECLARATION()
 
 DEFINE_APP(LoadTextureExample, "Simple Static Texture Example")
 
+void LoadTextureExample::InitializeShaders(void)
+{
+    base_prog = glCreateProgram();
+    vglAttachShaderSourceFromFile(base_prog, GL_VERTEX_SHADER,      "media/shaders/static-texture/quad.vert");
+    vglAttachShaderSourceFromFile(base_prog, GL_FRAGMENT_SHADER,    "media/shaders/static-texture/quad.frag");
+    glLinkProgram(base_prog);
+}
 void LoadTextureExample::Initialize(const char * title)
 {
     base::Initialize(title);
 
-    base_prog = glCreateProgram();
-
-    static const char quad_shader_vs[] =
-        "#version 330 core\n"
-        "\n"
-        "layout (location = 0) in vec2 in_position;\n"
-        "layout (location = 1) in vec2 in_tex_coord;\n"
-        "\n"
-        "out vec2 tex_coord;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "    gl_Position = vec4(in_position, 0.5, 1.0);\n"
-        "    tex_coord = in_tex_coord;\n"
-        "}\n"
-    ;
-
-    static const char quad_shader_fs[] =
-        "#version 330 core\n"
-        "\n"
-        "in vec2 tex_coord;\n"
-        "\n"
-        "layout (location = 0) out vec4 color;\n"
-        "\n"
-        "uniform sampler2D tex;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "    color = texture(tex, tex_coord);\n"
-        "}\n"
-    ;
-
-    vglAttachShaderSource(base_prog, GL_VERTEX_SHADER, quad_shader_vs);
-    vglAttachShaderSource(base_prog, GL_FRAGMENT_SHADER, quad_shader_fs);
+    InitializeShaders();
 
     glGenBuffers(1, &quad_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
-
-    static const GLfloat quad_data[] =
+    static const GLfloat quad_data[2*(vertexCoordCount+textureCoordCount)] =
     {
          0.75f, -0.75f,
         -0.75f, -0.75f,
         -0.75f, 0.75f,
          0.75f, 0.75f,
 
+         1.0f, 1.0f,
+         1.0f, 0.0f, 
+         0.0f, 0.0f,   //going out of +/-[0;1] interval => extrapolation
+         0.0f, 1.0f
+
+    };
+/*
+         0.0f, 0.0f,
+        -0.75f, 0.75f,
+         0.75f, 0.75f,
+
+         0.5f, 0.0f,
+         0.0f, 1.5f,
+         1.5f, 1.5f,
+
+         0.75f, -0.75f,
+        -0.75f, -0.75f,
+        -0.75f, 0.75f,
+         0.75f, 0.75f,
+
+         0.0f, 0.0f,   //going out of +/-[0;1] interval => extrapolation
+         0.5f, 0.0f,
+         0.5f, 0.5f,
+         0.0f, 0.5f
+
          0.0f, 0.0f,
          1.0f, 0.0f,
          1.0f, 1.0f,
          0.0f, 1.0f
-    };
-
+*/
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad_data), quad_data, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(8 * sizeof(float)));
+    //8 first float in quad_data
+    const GLint attribSize=2; // vertex coord completed with static const for Z and w in vertex shader
+    const GLboolean normalize= GL_FALSE;
+    const GLsizei stride=0;
+    GLuint offset=0;
+    const GLint att_type=GL_FLOAT;
+    glVertexAttribPointer(VertexCoordID, attribSize, att_type, normalize, stride, BUFFER_OFFSET(offset));
+    //8 and last following float in quad_data
+    offset=8*sizeof(GLfloat);
+    glVertexAttribPointer(TextureCoordID, attribSize, att_type, normalize, stride, BUFFER_OFFSET(offset));
 
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(VertexCoordID);
+    glEnableVertexAttribArray(TextureCoordID);
 
-    glLinkProgram(base_prog);
 
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
-    glTexStorage2D(GL_TEXTURE_2D, 4, GL_RGBA8, 8, 8);
+    
+    const GLsizei levelCount=1;
+    const GLsizei texWidth=8,texHeigth=8;
 
-    static const unsigned char texture_data[] =
+    const GLint internal_format=GL_RGBA8;
+    //const GLint internal_format=GL_RGBA16; 
+    glTexStorage2D(GL_TEXTURE_2D, levelCount, internal_format, texWidth, texHeigth);
+
+    // texture_data is a 1D array of texWidth x texHeigth values 
+    static const unsigned char texture_data[texWidth*texHeigth] =
+        {
+        0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+        0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+        0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+        0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+        0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF
+    };    
+    /*
+    static const GLuint texture_data[texWidth*texHeigth] =
+    {
+        0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000,
+        0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF,
+        0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000,
+        0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF,
+        0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000,
+        0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF,
+        0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000,
+        0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF
+    };
+    */
+    /*
+    const GLsizei texWidth=4,texHeigth=4;
+
+    {
+        0xFF, 0x00, 0xFF, 0x00, 
+        0x00, 0xFF, 0x00, 0xFF, 
+        0xFF, 0x00, 0xFF, 0x00, 
+        0x00, 0xFF, 0x00, 0xFF
+    };
+    const GLsizei texWidth=8,texHeigth=8;
+    
     {
         0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
         0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
@@ -117,32 +168,31 @@ void LoadTextureExample::Initialize(const char * title)
         0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
         0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
         0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF
-    };
-
+    };    */
+    const GLint textureLevel=0, 
+                x_offset=0,y_offset=0,
+                external_format=GL_GREEN,
+                //external_format=GL_RED_INTEGER,
+                data_type=GL_UNSIGNED_BYTE;
+                //data_type=GL_UNSIGNED_INT;
     glTexSubImage2D(GL_TEXTURE_2D,
-                    0,
-                    0, 0,
-                    8, 8,
-                    GL_RED, GL_UNSIGNED_BYTE,
-                    texture_data);
+                    textureLevel,
+                    x_offset, y_offset,texWidth, texHeigth,
+                    external_format, data_type,texture_data);
 
-    static const GLint swizzles[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
-    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzles);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
+    static const GLint swizzles[] = { GL_GREEN, GL_ZERO, GL_ZERO, GL_ONE };//swizzle display red from green external values
+    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzles);//use grey image with value defined in R component
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); //method to minify
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); //method to magnify
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); //GL_CLAMP_TO_EDGE
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);//GL_CLAMP_TO_EDGE
+    float borderColor[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor); 
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void LoadTextureExample::Display(bool auto_redraw)
 {
-    float t = float(app_time() & 0x3FFF) / float(0x3FFF);
-    static const vmath::vec3 X(1.0f, 0.0f, 0.0f);
-    static const vmath::vec3 Y(0.0f, 1.0f, 0.0f);
-    static const vmath::vec3 Z(0.0f, 0.0f, 1.0f);
-
     glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
     glClearDepth(1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -151,7 +201,8 @@ void LoadTextureExample::Display(bool auto_redraw)
     glUseProgram(base_prog);
 
     glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, vertexCoordCount);
+    //glDrawArrays(GL_TRIANGLES, 0, vertexCoordCount);
 
     base::Display();
 }

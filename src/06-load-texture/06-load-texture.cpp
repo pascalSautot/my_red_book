@@ -34,6 +34,8 @@ BEGIN_APP_DECLARATION(LoadTextureExample)
     GLuint quad_vbo;
 
     GLuint tex;
+    enum AttribIndex { AttribVertexID, AttribTextureID, MaxAttrib};
+
 END_APP_DECLARATION()
 
 DEFINE_APP(LoadTextureExample, "Simple LoadTexture Example")
@@ -41,7 +43,6 @@ DEFINE_APP(LoadTextureExample, "Simple LoadTexture Example")
 void LoadTextureExample::Initialize(const char * title)
 {
     base::Initialize(title);
-
 
     // load shaders in program
     ShaderInfo  shaders[] =
@@ -76,11 +77,11 @@ void LoadTextureExample::Initialize(const char * title)
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(8 * sizeof(float)));
+    glVertexAttribPointer(AttribVertexID, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(0));
+    glVertexAttribPointer(AttribTextureID, 2, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(8 * sizeof(float)));
 
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(AttribVertexID);
+    glEnableVertexAttribArray(AttribTextureID);
 
     glLinkProgram(base_prog);
 
@@ -94,14 +95,12 @@ void LoadTextureExample::Initialize(const char * title)
     glTexParameteri(image.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
     vglUnloadImage(&image);
+
 }
 
 void LoadTextureExample::Display(bool auto_redraw)
 {
     float t = float(app_time() & 0x3FFF) / float(0x3FFF);
-    static const vmath::vec3 X(1.0f, 0.0f, 0.0f);
-    static const vmath::vec3 Y(0.0f, 1.0f, 0.0f);
-    static const vmath::vec3 Z(0.0f, 0.0f, 1.0f);
 
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
     glClearDepth(1.0f);

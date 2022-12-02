@@ -13,6 +13,7 @@
 #include "vbm.h"
 
 #include <stdio.h>
+#include <iostream>
 
 BEGIN_APP_DECLARATION(TransformFeedbackExample)
     // Override functions from base class
@@ -21,30 +22,40 @@ BEGIN_APP_DECLARATION(TransformFeedbackExample)
     virtual void Finalize(void);
     virtual void Resize(int width, int height);
 
+    typedef struct  {
+        vmath::vec4 position;
+        vmath::vec3 velocity;
+    } buffer_t;
+
     // Member variables
     float aspect;
-    GLuint update_prog;
-    GLuint vao[2];
-    GLuint vbo[2];
-    GLuint xfb;
 
-    GLuint render_prog;
-    GLuint geometry_vbo;
-    GLuint render_vao;
-    GLint render_model_matrix_loc;
-    GLint render_projection_matrix_loc;
+    GLuint collision_prog;
+    GLuint particule_vao[2];
+    GLuint particule_vbo[2];
+    GLint particle_model_matrix_loc;
+    GLint particle_projection_matrix_loc;
+    GLint particle_triangle_count_loc;
+    GLint particle_time_step_loc;
 
-    GLuint geometry_tex;
+    GLuint armadillo_prog;
+    GLuint armadillo_geometry_tbo;
+    GLuint armadillo_vao;
+    GLint armadillo_model_matrix_loc;
+    GLint armadillo_projection_matrix_loc;
+    GLuint armadillo_geometry_tex;
 
-    GLuint geometry_xfb;
-    GLuint particle_xfb;
+    VBObject armadillo_mesh;
+protected:
+    GLboolean InitProg(GLuint &prog, ShaderInfo* shaders, const GLsizei count_v, const char * varyings_variables[], GLboolean use_varyings=false);
+    GLboolean InitArmadilloProg(void);
+    GLboolean InitParticleCollisionProg(void);   
+    GLboolean CheckProg(GLuint prog, ShaderInfo *shaders);
+    void BindParticleCollision(void);
+    void BindDataArmadillo(void);
+    void ParticleCollisionDisplay(bool auto_redraw, float t, vmath::mat4 &model_matrix, vmath::mat4 &projection_matrix);
+    void ArmadilloDisplay(bool auto_redraw, float t, vmath::mat4 &model_matrix, vmath::mat4 &projection_matrix);
 
-    GLint model_matrix_loc;
-    GLint projection_matrix_loc;
-    GLint triangle_count_loc;
-    GLint time_step_loc;
-
-    VBObject object;
 END_APP_DECLARATION()
 
 DEFINE_APP(TransformFeedbackExample, "TransformFeedback Example")
@@ -75,259 +86,312 @@ static vmath::vec3 random_vector(float minmag = 0.0f, float maxmag = 1.0f)
     return randomvec;
 }
 
-void TransformFeedbackExample::Initialize(const char * title)
+GLboolean TransformFeedbackExample::CheckProg(GLuint prog, ShaderInfo *shaders)
 {
-    int i, j;
+    GLboolean status=true;
+    GLint linked;
+    glGetProgramiv( prog, GL_LINK_STATUS, &linked );
+    if ( !linked ) {
+        status=false;
+#ifdef _DEBUG
+        GLsizei len;
+        glGetProgramiv( prog, GL_INFO_LOG_LENGTH, &len );
 
-    base::Initialize(title);
+        GLchar* log = new GLchar[len+1];
+        glGetProgramInfoLog( prog, len, &len, log );
+        std::cerr << "Shader linking failed: " << log << std::endl;
+        delete [] log;
+#endif /* DEBUG */
+        ShaderInfo *entry=shaders;
+        for ( entry = shaders; entry->type != GL_NONE; ++entry ) {
+            glDeleteShader( entry->shader );
+            entry->shader = 0;
+        }
+    }
+    return(status);
+}
+#undef USE_VARSYINGS        
 
-    update_prog = glCreateProgram();
+GLboolean TransformFeedbackExample::InitProg(GLuint &prog, ShaderInfo* shaders, const GLsizei count_v, const char *variables[], GLboolean use_varyings)
+{
+    GLboolean status=true;
+    // render 
+    prog = glCreateProgram();
 
-    static const char update_vs_source[] =
-            "#version 410\n"
-            "\n"
-            "uniform mat4 model_matrix;\n"
-            "uniform mat4 projection_matrix;\n"
-            "uniform int triangle_count;\n"
-            "\n"
-            "layout (location = 0) in vec4 position;\n"
-            "layout (location = 1) in vec3 velocity;\n"
-            "\n"
-            "out vec4 position_out;\n"
-            "out vec3 velocity_out;\n"
-            "\n"
-            "uniform samplerBuffer geometry_tbo;\n"
-            "uniform float time_step = 0.02;\n"
-            "\n"
-            "bool intersect(vec3 origin, vec3 direction, vec3 v0, vec3 v1, vec3 v2, out vec3 point)\n"
-            "{\n"
-            "    vec3 u, v, n;\n"
-            "    vec3 w0, w;\n"
-            "    float r, a, b;\n"
-            "\n"
-            "    u = (v1 - v0);\n"
-            "    v = (v2 - v0);\n"
-            "    n = cross(u, v);\n"
-            // "    if (length(n) < 0.1)\n"
-            // "        return false;\n"
-            "\n"
-            "    w0 = origin - v0;\n"
-            "    a = -dot(n, w0);\n"
-            "    b = dot(n, direction);\n"
-            //"    if (abs(b) < 0.1)\n"
-            //"        return false;\n"
-            "\n"
-            "    r = a / b;\n"
-            "    if (r < 0.0 || r > 1.0)\n"
-            "        return false;\n"
-            "\n"
-            "    point = origin + r * direction;\n"
-            "\n"
-            "    float uu, uv, vv, wu, wv, D;\n"
-            "\n"
-            "    uu = dot(u, u);\n"
-            "    uv = dot(u, v);\n"
-            "    vv = dot(v, v);\n"
-            "    w = point - v0;\n"
-            "    wu = dot(w, u);\n"
-            "    wv = dot(w, v);\n"
-            "    D = uv * uv - uu * vv;\n"
-            "\n"
-            "    float s, t;\n"
-            "\n"
-            "    s = (uv * wv - vv * wu) / D;\n"
-            "    if (s < 0.0 || s > 1.0)\n"
-            "        return false;\n"
-            "    t = (uv * wu - uu * wv) / D;\n"
-            "    if (t < 0.0 || (s + t) > 1.0)\n"
-            "        return false;\n"
-            "\n"
-            "    return true;\n"
-            "}\n"
-            "\n"
-            "vec3 reflect_vector(vec3 v, vec3 n)\n"
-            "{\n"
-            "    return v - 2.0 * dot(v, n) * n;\n"
-            "}\n"
-            "\n"
-            "void main(void)\n"
-            "{\n"
-            "    vec3 accelleration = vec3(0.0, -0.3, 0.0);\n"
-            "    vec3 new_velocity = velocity + accelleration * time_step;\n"
-            "    vec4 new_position = position + vec4(new_velocity * time_step, 0.0);\n"
-            "    vec3 v0, v1, v2;\n"
-            "    vec3 point;\n"
-            "    int i;\n"
-            "    for (i = 0; i < triangle_count; i++)\n"
-            "    {\n"
-            "        v0 = texelFetch(geometry_tbo, i * 3).xyz;\n"
-            "        v1 = texelFetch(geometry_tbo, i * 3 + 1).xyz;\n"
-            "        v2 = texelFetch(geometry_tbo, i * 3 + 2).xyz;\n"
-            "        if (intersect(position.xyz, position.xyz - new_position.xyz, v0, v1, v2, point))\n"
-            "        {\n"
-            "            vec3 n = normalize(cross(v1 - v0, v2 - v0));\n"
-            "            new_position = vec4(point + reflect_vector(new_position.xyz - point, n), 1.0);\n"
-            "            new_velocity = 0.8 * reflect_vector(new_velocity, n);\n"
-            "        }\n"
-            "    }\n"
-            "    if (new_position.y < -40.0)\n"
-            "    {\n"
-            "        new_position = vec4(-new_position.x * 0.3, position.y + 80.0, 0.0, 1.0);\n"
-            "        new_velocity *= vec3(0.2, 0.1, -0.3);\n"
-            "    }\n"
-            "    velocity_out = new_velocity * 0.9999;\n"
-            "    position_out = new_position;\n"
-            "    gl_Position = projection_matrix * (model_matrix * position);\n"
-            "}\n";
+    ShaderInfo *entry= shaders;
+    // render loop
+    while ( entry->type != GL_NONE ) {
+        status = status && vglAttachShaderSourceFromFile(prog, entry->type, entry->filename);
+        ++entry;
+    }  
+    if(status)
+    {
+        if(use_varyings)      
+            glTransformFeedbackVaryings(prog, count_v, variables, GL_INTERLEAVED_ATTRIBS);
+        glLinkProgram(prog);
+        glUseProgram(prog);
+        status=CheckProg(prog,shaders);
+    }
+    return status;
+}
 
-    static const char white_fs[] =
-        "#version 410\n"
-        "\n"
-        "layout (location = 0) out vec4 color;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "    color = vec4(1.0);\n"
-        "}\n";
-
-    vglAttachShaderSource(update_prog, GL_VERTEX_SHADER, update_vs_source);
-    vglAttachShaderSource(update_prog, GL_FRAGMENT_SHADER, white_fs);
-
-    static const char * varyings[] =
+GLboolean TransformFeedbackExample::InitParticleCollisionProg()
+{
+    GLboolean status=true;
+#ifdef USE_VARSYINGS        
+    GLboolean use_varyings=true;     
+    ShaderInfo  shaders[] =
+    {
+        { GL_VERTEX_SHADER, "media/shaders/xfb/particle-collision.vert" },
+        { GL_FRAGMENT_SHADER, "media/shaders/xfb/particle.frag" },
+        { GL_NONE, NULL }
+    };
+#else
+    GLboolean use_varyings=false;     
+    ShaderInfo  shaders[] =
+    {
+        { GL_VERTEX_SHADER, "media/shaders/xfb/particle-collision-xfb.vert" },
+        { GL_FRAGMENT_SHADER, "media/shaders/xfb/particle.frag" },
+        { GL_NONE, NULL }
+    };
+#endif    
+    const GLsizei count_v=2;
+    const char * varying_variables[count_v] =
     {
         "position_out", "velocity_out"
+    };    
+    status=InitProg(collision_prog, shaders,count_v,varying_variables,use_varyings);
+    
+    if(status)
+    {
+        particle_model_matrix_loc = glGetUniformLocation(collision_prog, "model_matrix");
+        particle_projection_matrix_loc = glGetUniformLocation(collision_prog, "projection_matrix");
+        particle_triangle_count_loc = glGetUniformLocation(collision_prog, "triangle_count");
+        particle_time_step_loc = glGetUniformLocation(collision_prog, "time_step");
+
+        if(particle_model_matrix_loc == -1){
+            std::cout << "scale model_matrix not fetched in shader" << std::endl;
+            status=false;
+        }           
+        if(particle_projection_matrix_loc == -1){
+            std::cout << "scale projection_matrix not fetched in shader" << std::endl;
+            status=false;
+        }                    
+        if(particle_triangle_count_loc == -1){
+            std::cout << "scale triangle_count not fetched in shader" << std::endl;
+            status=false;
+        }                    
+        if(particle_time_step_loc == -1){
+            std::cout << "scale time_step not fetched in shader" << std::endl;
+            status=false;
+        }                     
+    }
+    return(status);
+}
+
+GLboolean TransformFeedbackExample::InitArmadilloProg()
+{
+    GLboolean status=true;
+    // render 
+    armadillo_prog = glCreateProgram();
+#ifdef USE_VARSYINGS   
+    GLboolean use_varyings=true;     
+    ShaderInfo  shaders[] =
+    {
+        { GL_VERTEX_SHADER, "media/shaders/xfb/render.vert" },
+        { GL_FRAGMENT_SHADER, "media/shaders/xfb/blue.frag" },
+        { GL_NONE, NULL }
     };
-
-    glTransformFeedbackVaryings(update_prog, 2, varyings, GL_INTERLEAVED_ATTRIBS);
-
-    glLinkProgram(update_prog);
-    glUseProgram(update_prog);
-
-    model_matrix_loc = glGetUniformLocation(update_prog, "model_matrix");
-    projection_matrix_loc = glGetUniformLocation(update_prog, "projection_matrix");
-    triangle_count_loc = glGetUniformLocation(update_prog, "triangle_count");
-    time_step_loc = glGetUniformLocation(update_prog, "time_step");
-
-    render_prog = glCreateProgram();
-
-    static const char render_vs[] =
-        "#version 410\n"
-        "\n"
-        "uniform mat4 model_matrix;\n"
-        "uniform mat4 projection_matrix;\n"
-        "\n"
-        "layout (location = 0) in vec4 position;\n"
-        "layout (location = 1) in vec3 normal;\n"
-        "\n"
-        "out vec4 world_space_position;\n"
-        "\n"
-        "out vec3 vs_fs_normal;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "    vec4 pos = (model_matrix * (position * vec4(1.0, 1.0, 1.0, 1.0)));\n"
-        "    world_space_position = pos;\n"
-        "    vs_fs_normal = normalize((model_matrix * vec4(normal, 0.0)).xyz);\n"
-        "    gl_Position = projection_matrix * pos;\n"
-        "}\n";
-
-    static const char blue_fs[] =
-        "#version 410\n"
-        "\n"
-        "layout (location = 0) out vec4 color;\n"
-        "\n"
-        "in vec3 vs_fs_normal;\n"
-        "\n"
-        "void main(void)\n"
-        "{\n"
-        "    color = vec4(0.0, 0.2, 0.0, 1.0) + vec4(0.2, 0.5, 0.4, 1.0) * abs(vs_fs_normal.z) + vec4(0.8, 0.9, 0.7, 1.0) * pow(abs(vs_fs_normal.z), 70.0);\n"
-        "}\n";
-
-    vglAttachShaderSource(render_prog, GL_VERTEX_SHADER, render_vs);
-    vglAttachShaderSource(render_prog, GL_FRAGMENT_SHADER, blue_fs);
-
-    static const char * varyings2[] =
+#else
+    GLboolean use_varyings=false;     
+    ShaderInfo  shaders[] =
+    {
+        { GL_VERTEX_SHADER, "media/shaders/xfb/render-xfb.vert" },
+        { GL_FRAGMENT_SHADER, "media/shaders/xfb/blue.frag" },
+        { GL_NONE, NULL }
+    };
+#endif
+    const GLsizei count_v=1;
+    const char * varying_variables[count_v] =
     {
         "world_space_position"
-    };
+    };   
+    status=InitProg(armadillo_prog, shaders,count_v,varying_variables,use_varyings);    
 
-    glTransformFeedbackVaryings(render_prog, 1, varyings2, GL_INTERLEAVED_ATTRIBS);
-
-    glLinkProgram(render_prog);
-    glUseProgram(render_prog);
-
-    render_model_matrix_loc = glGetUniformLocation(render_prog, "model_matrix");
-    render_projection_matrix_loc = glGetUniformLocation(render_prog, "projection_matrix");
-
-    glGenVertexArrays(2, vao);
-    glGenBuffers(2, vbo);
-
-    for (i = 0; i < 2; i++)
+    if(status)
     {
-        glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, vbo[i]);
-        glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, point_count * (sizeof(vmath::vec4) + sizeof(vmath::vec3)), NULL, GL_DYNAMIC_COPY);
-        if (i == 0)
-        {
-            struct buffer_t {
-                vmath::vec4 position;
-                vmath::vec3 velocity;
-            } * buffer = (buffer_t *)glMapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, GL_WRITE_ONLY);
+        armadillo_model_matrix_loc = glGetUniformLocation(armadillo_prog, "model_matrix");
+        armadillo_projection_matrix_loc = glGetUniformLocation(armadillo_prog, "projection_matrix");
 
-            for (j = 0; j < point_count; j++)
-            {
-                buffer[j].velocity = random_vector();
-                buffer[j].position = vmath::vec4(buffer[j].velocity + vmath::vec3(-0.5f, 40.0f, 0.0f), 1.0f);
-                buffer[j].velocity = vmath::vec3(buffer[j].velocity[0], buffer[j].velocity[1] * 0.3f, buffer[j].velocity[2] * 0.3f);
-            }
+        if(armadillo_model_matrix_loc == -1){
+            std::cout << "scale model_matrix not fetched in shader" << std::endl;
+            status=false;
+        }  
+        if(armadillo_projection_matrix_loc == -1){
+            std::cout << "scale projection_matrix not fetched in shader" << std::endl;
+            status=false;
+        }                           
+    }
+    return(status);
+}
+void TransformFeedbackExample::Initialize(const char * title)
+{
+    base::Initialize(title);
 
-            glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
-        }
-
-        glBindVertexArray(vao[i]);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo[i]);
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vmath::vec4) + sizeof(vmath::vec3), NULL);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vmath::vec4) + sizeof(vmath::vec3), (GLvoid *)sizeof(vmath::vec4));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
+    GLboolean status=InitParticleCollisionProg();
+    status = status && InitArmadilloProg();
+    if(!status) 
+    {
+        Finalize();
+        exit(0);
     }
 
-    glGenBuffers(1, &geometry_vbo);
-    glGenTextures(1, &geometry_tex);
-    glBindBuffer(GL_TEXTURE_BUFFER, geometry_vbo);
-    glBufferData(GL_TEXTURE_BUFFER, 1024 * 1024 * sizeof(vmath::vec4), NULL, GL_DYNAMIC_COPY);
-    glBindTexture(GL_TEXTURE_BUFFER, geometry_tex);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, geometry_vbo);
-
-    glGenVertexArrays(1, &render_vao);
-    glBindVertexArray(render_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, geometry_vbo);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(0);
-
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClearDepth(1.0f);
-
-    object.LoadFromVBM("media/armadillo_low.vbm", 0, 1, 2);
+    BindParticleCollision();
+    BindDataArmadillo();
 }
-
-static inline int min(int a, int b)
+void TransformFeedbackExample::BindParticleCollision(void)
 {
-    return a < b ? a : b;
+    enum { positionId=0, velocityId=1};
+
+    glGenVertexArrays(2, particule_vao);
+    glGenBuffers(2, particule_vbo); // particules' position and velocity  
+
+    const GLsizei buffer_t_size=sizeof(buffer_t); 
+    const GLsizei position_size =4; // vec4
+    const GLsizei velocity_size =3; // vec3
+    const GLboolean normalize = false;
+    const GLsizei buffer_t_stride=buffer_t_size;
+    const GLint att_type=GL_FLOAT;
+
+    const GLsizeiptr points_size= point_count * (buffer_t_size);
+    const vmath::vec3 particule_flow_direction=vmath::vec3(-0.5f, 40.0f, 0.0f);
+    const GLuint position_offset=sizeof(vmath::vec4);
+    const int vbo_count= sizeof(particule_vbo)/sizeof(particule_vbo[0]);
+    GLboolean set_buffer_data=true;
+
+    for (int i = 0; i < vbo_count; i++)
+    {
+        glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, particule_vbo[i]);
+        glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, points_size, NULL, GL_DYNAMIC_COPY);
+        if (set_buffer_data)
+        {
+            buffer_t * buffer = (buffer_t *)glMapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, GL_WRITE_ONLY);
+            for (int j = 0; j < point_count; j++)
+            {
+                buffer[j].velocity = random_vector();
+                buffer[j].position = vmath::vec4(buffer[j].velocity + particule_flow_direction, 1.0f);
+                buffer[j].velocity = vmath::vec3(buffer[j].velocity[0], buffer[j].velocity[1] * 0.3f, buffer[j].velocity[2] * 0.3f);
+            }
+            glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
+            set_buffer_data=false;
+        }
+
+        //match located data for position and velocity in shader article-collision-xfb/particle-collision
+        glBindVertexArray(particule_vao[i]);
+        glBindBuffer(GL_ARRAY_BUFFER, particule_vbo[i]);
+        glVertexAttribPointer(positionId, position_size, att_type, normalize, buffer_t_stride, NULL); // position one set each buffer_t
+        glVertexAttribPointer(velocityId, velocity_size, att_type, normalize, buffer_t_stride, BUFFER_OFFSET(position_offset)); // velocity one set each buffer_t + offset for position (vec4)
+        glEnableVertexAttribArray(positionId);
+        glEnableVertexAttribArray(velocityId);
+    }
+}
+void TransformFeedbackExample::BindDataArmadillo(void)
+{
+    enum { positionId=0};
+    const GLsizei vertex_coord_size =4; // vec4
+    const GLboolean normalize = false;
+    const GLint att_type=GL_FLOAT;
+    
+    // load armadillo mesh
+    armadillo_mesh.LoadFromVBM("media/armadillo_low.vbm", 0, 1, 2);
+    const GLint vertex_count(armadillo_mesh.GetVertexCount());
+
+    // define a buffer to pass on mesh vertices from the vertex shader
+    glGenBuffers(1, &armadillo_geometry_tbo);
+    glBindBuffer(GL_TEXTURE_BUFFER, armadillo_geometry_tbo);
+    // allocate storage for texture buffer enough to fit all vertices
+    glBufferData(GL_TEXTURE_BUFFER, vertex_count * sizeof(vmath::vec4), NULL, GL_DYNAMIC_COPY);
+    
+    // create a texure object (name saved in armadillo_geometry_tex)
+    glGenTextures(1, &armadillo_geometry_tex); 
+    //bind texture object to the texture buffer object (TBO)
+    glBindTexture(GL_TEXTURE_BUFFER, armadillo_geometry_tex);
+    
+    //attach a buffer object's data store to a buffer texture object
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, armadillo_geometry_tbo); // GL_RGBA32F => storage format is 4 x float to fit a vec4
+
+    glGenVertexArrays(1, &armadillo_vao);
+    glBindVertexArray(armadillo_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, armadillo_geometry_tbo);
+    glVertexAttribPointer(positionId, vertex_coord_size, att_type, normalize, 0, NULL); //  position in render-xfb.vert / render.vert shader
+    glEnableVertexAttribArray(positionId);
 }
 
-void TransformFeedbackExample::Display(bool auto_redraw)
+void TransformFeedbackExample::ArmadilloDisplay(bool auto_redraw, float t,vmath::mat4 &model_matrix, vmath::mat4 &projection_matrix)
+{
+    glUseProgram(armadillo_prog);
+    glUniformMatrix4fv(armadillo_model_matrix_loc, 1, GL_FALSE, model_matrix);
+    glUniformMatrix4fv(armadillo_projection_matrix_loc, 1, GL_FALSE, projection_matrix);
+
+    glBindVertexArray(armadillo_vao);
+
+    glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, armadillo_geometry_tbo);
+
+    // get transformed vertex coord from render.vert/render-xfb.vert 
+    glBeginTransformFeedback(GL_TRIANGLES);
+    armadillo_mesh.Render(); // drawn primitves must be GL_TRIANGLES
+    glEndTransformFeedback();
+
+    glBindVertexArray(0);
+}
+
+void TransformFeedbackExample::ParticleCollisionDisplay(bool auto_redraw, float tick, vmath::mat4 &model_matrix, vmath::mat4 &projection_matrix)
 {
     static int frame_count = 0;
-    float t = float(app_time() & 0x3FFFF) / float(0x3FFFF);
-    static float q = 0.0f;
-    static const vmath::vec3 X(1.0f, 0.0f, 0.0f);
-    static const vmath::vec3 Y(0.0f, 1.0f, 0.0f);
-    static const vmath::vec3 Z(0.0f, 0.0f, 1.0f);
+    static float prev_tick = 0.0f;
+
+    glUseProgram(collision_prog);
+    glUniformMatrix4fv(particle_model_matrix_loc, 1, GL_FALSE, model_matrix);
+    glUniformMatrix4fv(particle_projection_matrix_loc, 1, GL_FALSE, projection_matrix);
+
+    const GLint triangle_count(armadillo_mesh.GetVertexCount() / 3);
+    glUniform1i(particle_triangle_count_loc, triangle_count);
+
+    const float time_step(tick - prev_tick);
+    if (time_step > 0)
+    {
+        glUniform1f(particle_time_step_loc, time_step * 2000.0f);
+    }
+
+    prev_tick = tick;
+
+    //manage double buffer
+    const int vao_index= frame_count%2;
+    const int vbo_index( vao_index==1 ? 0 : 1);
+
+    // use buffer to get pos and velocity
+    glBindVertexArray(particule_vao[vao_index]);
+    glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, particule_vbo[vbo_index]); 
+
+    glBeginTransformFeedback(GL_POINTS); // transfer particules' position and velocity
+
+    //display as many points as frames displayed but no more than point_count
+    const int c(frame_count >> 3);
+    const int count( std::min(point_count, c));
+    glDrawArrays(GL_POINTS, 0, count);
+
+    glEndTransformFeedback();
+
+    glBindVertexArray(0);
+
+    frame_count++;
+
+}
+void TransformFeedbackExample::Display(bool auto_redraw)
+{
+    float tick = float(app_time() & 0x3FFFF) / float(0x3FFFF);
 
     vmath::mat4 projection_matrix(vmath::frustum(-1.0f, 1.0f, -aspect, aspect, 1.0f, 5000.0f) * vmath::translate(0.0f, 0.0f, -100.0f));
-    vmath::mat4 model_matrix(vmath::scale(0.3f) *
-                             vmath::rotate(t * 360.0f, 0.0f, 1.0f, 0.0f) *
-                             vmath::rotate(t * 360.0f * 3.0f, 0.0f, 0.0f, 1.0f));
 
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
@@ -335,49 +399,16 @@ void TransformFeedbackExample::Display(bool auto_redraw)
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
 
-    glUseProgram(render_prog);
-    glUniformMatrix4fv(render_model_matrix_loc, 1, GL_FALSE, model_matrix);
-    glUniformMatrix4fv(render_projection_matrix_loc, 1, GL_FALSE, projection_matrix);
+    vmath::mat4 model_matrix(vmath::scale(0.3f) *
+                             vmath::rotate(tick * 360.0f, 0.0f, 1.0f, 0.0f) *
+                             vmath::rotate(tick * 360.0f * 3.0f, 0.0f, 0.0f, 1.0f));
 
-    glBindVertexArray(render_vao);
+    //display armadillo and get the geometry via transform feedback
+    ArmadilloDisplay(auto_redraw,tick,model_matrix, projection_matrix);
 
-    glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, geometry_vbo);
-
-    glBeginTransformFeedback(GL_TRIANGLES);
-    object.Render();
-    glEndTransformFeedback();
-
-    glUseProgram(update_prog);
+    //display particles and compute collision with armadillo to splash around
     model_matrix = vmath::mat4::identity();
-    glUniformMatrix4fv(model_matrix_loc, 1, GL_FALSE, model_matrix);
-    glUniformMatrix4fv(projection_matrix_loc, 1, GL_FALSE, projection_matrix);
-    glUniform1i(triangle_count_loc, object.GetVertexCount() / 3);
-
-    if (t > q)
-    {
-        glUniform1f(time_step_loc, (t - q) * 2000.0f);
-    }
-
-    q = t;
-
-    if ((frame_count & 1) != 0)
-    {
-        glBindVertexArray(vao[1]);
-        glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, vbo[0]);
-    }
-    else
-    {
-        glBindVertexArray(vao[0]);
-        glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, vbo[1]);
-    }
-
-    glBeginTransformFeedback(GL_POINTS);
-    glDrawArrays(GL_POINTS, 0, min(point_count, (frame_count >> 3)));
-    glEndTransformFeedback();
-
-    glBindVertexArray(0);
-
-    frame_count++;
+    ParticleCollisionDisplay(auto_redraw,tick,model_matrix, projection_matrix);
 
     base::Display();
 }
@@ -385,9 +416,9 @@ void TransformFeedbackExample::Display(bool auto_redraw)
 void TransformFeedbackExample::Finalize(void)
 {
     glUseProgram(0);
-    glDeleteProgram(update_prog);
-    glDeleteVertexArrays(2, vao);
-    glDeleteBuffers(2, vbo);
+    glDeleteProgram(collision_prog);
+    glDeleteVertexArrays(2, particule_vao);
+    glDeleteBuffers(2, particule_vbo);
 }
 
 void TransformFeedbackExample::Resize(int width, int height)

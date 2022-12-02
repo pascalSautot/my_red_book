@@ -1,5 +1,5 @@
 #version 330 core
-
+// vertex buffer array layout 0=> vertex coord, 1=> texture
 layout (location = 0) in vec2 in_position;
 layout (location = 1) in vec2 in_tex_coord;
 

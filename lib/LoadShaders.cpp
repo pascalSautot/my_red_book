@@ -16,7 +16,7 @@ extern "C" {
 
 //----------------------------------------------------------------------------
 
-static const GLchar*
+const GLchar*
 ReadShader( const char* filename )
 {
 #ifdef WIN32
@@ -48,7 +48,6 @@ ReadShader( const char* filename )
 }
 
 //----------------------------------------------------------------------------
-
 GLuint
 LoadShaders(ShaderInfo* shaders)
 {
