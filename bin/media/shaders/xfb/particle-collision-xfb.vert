@@ -14,49 +14,55 @@ layout (xfb_buffer = 0, xfb_offset=16) out vec3 velocity_out; // transform feedb
 uniform samplerBuffer geometry_tbo; // a handle for accessing a buffer texture
 uniform float time_step = 0.02;
 
-bool intersect(vec3 origin, vec3 direction, vec3 v0, vec3 v1, vec3 v2, out vec3 point)
+bool intersect(vec3 origin, vec3 destination, vec3 v0, vec3 v1, vec3 v2, out vec3 point)
 {
-    vec3 u, v, n;
-    vec3 w0, w;
-    float r, a, b;
+    vec3 L1= origin;
+    vec3 L2= destination;
 
-    u = (v1 - v0);
-    v = (v2 - v0);
-    n = cross(u, v);
-            // "    if (length(n) < 0.1)
-            // "        return false;
+    // the parametric equation of the line is : L= L1 + t (L2-L1)
+    // the parametric equation of the ^plane is : v = v0 + u (v1-v0) + v (v2-v0)
+    //   L1 + t a  = v0 + u b + v c 
+    //   L1 - v0   = -t a + u b + v c
+    // [ L1 - v0 ] = [ -a b c ][t,u,v]T 
+    // [ L1 - v0 ] = [ _a b c ][t,u,v]T 
+    vec3 a  = (L2 - L1);
+    vec3 b =  (v1 - v0);
+    vec3 c =  (v2 - v0);
+    vec3 _a = -a;
+    vec3 w0=(L1 - v0);
+    // ps vector is (t,u,v)    
+    // w0 = M ps
+    // ps = inv(M) w0
+    // inv(M) = 1/det(M) Adj(M)
 
-    w0 = origin - v0;
-    a = -dot(n, w0);
-    b = dot(n, direction);
-            //"    if (abs(b) < 0.1)
-            //"        return false;
+    vec3 b_c=cross(b,c);
+    vec3 c_a=cross(c,_a);
+    vec3 a_b=cross(_a,b);
 
-    r = a / b;
-    if (r < 0.0 || r > 1.0)
+    float detM= dot(_a,b_c);
+    if(detM==0.0) // line is // to the plane
         return false;
+    mat3 M; //col row conventions
+    for(int k=0;k<3;k++)
+    {
+        M[0][k]=b_c[k];
+        M[1][k]=c_a[k];
+        M[2][k]=a_b[k];
+    }
+    M=M/detM;
+    mat3 MT=transpose(M);
+    vec3 ps= MT*w0;
+    float t=  ps[0];
+    float u=  ps[1];
+    float v=  ps[2];
 
-    point = origin + r * direction;
-
-    float uu, uv, vv, wu, wv, D;
-
-    uu = dot(u, u);
-    uv = dot(u, v);
-    vv = dot(v, v);
-    w = point - v0;
-    wu = dot(w, u);
-    wv = dot(w, v);
-    D = uv * uv - uu * vv;
-
-    float s, t;
-
-    s = (uv * wv - vv * wu) / D;
-    if (s < 0.0 || s > 1.0)
+    if( (t>1.0) || (t<0.0) )
         return false;
-    t = (uv * wu - uu * wv) / D;
-    if (t < 0.0 || (s + t) > 1.0)
+    if( (u>1.0) || (u<0.0) )
         return false;
-
+    if( (v>1.0) || (v<0.0) )
+        return false;
+    point = L1 + t * a;
     return true;
 }
 
@@ -86,7 +92,7 @@ void main(void)
         t_v0 = texelFetch(geometry_tbo, i * 3).xyz;
         t_v1 = texelFetch(geometry_tbo, i * 3 + 1).xyz;
         t_v2 = texelFetch(geometry_tbo, i * 3 + 2).xyz;
-        if (intersect(position.xyz, position.xyz - predicted_position.xyz, t_v0, t_v1, t_v2, intersection))
+        if (intersect(position.xyz, predicted_position.xyz, t_v0, t_v1, t_v2, intersection))
         {
             vec3 bounce = normalize(cross(t_v1 - t_v0, t_v2 - t_v0));
             new_position = vec4(intersection + reflect_vector(predicted_position.xyz - intersection, bounce), 1.0);
