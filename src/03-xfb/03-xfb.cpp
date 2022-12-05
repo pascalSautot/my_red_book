@@ -308,6 +308,7 @@ void TransformFeedbackExample::BindDataArmadillo(void)
 
     // define a buffer to pass on mesh vertices from the vertex shader
     glGenBuffers(1, &armadillo_geometry_tbo);
+    // use a texture buffer as a generic purpose data storage (se Ch11 Kessenich)
     glBindBuffer(GL_TEXTURE_BUFFER, armadillo_geometry_tbo);
     // allocate storage for texture buffer enough to fit all vertices
     glBufferData(GL_TEXTURE_BUFFER, vertex_count * sizeof(vmath::vec4), NULL, GL_DYNAMIC_COPY);

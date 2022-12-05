@@ -11,7 +11,7 @@ layout (location = 1) in vec3 velocity;
 layout (xfb_buffer = 0, xfb_offset=0) out vec4 position_out; // transform feedback 
 layout (xfb_buffer = 0, xfb_offset=16) out vec3 velocity_out; // transform feedback 
 
-uniform samplerBuffer geometry_tbo; // a handle for accessing a buffer texture
+uniform samplerBuffer geometry_tbo; // a handle for accessing a buffer texture containing triangle vertices
 uniform float time_step = 0.02;
 
 bool intersect(vec3 origin, vec3 destination, vec3 v0, vec3 v1, vec3 v2, out vec3 point)
@@ -20,7 +20,7 @@ bool intersect(vec3 origin, vec3 destination, vec3 v0, vec3 v1, vec3 v2, out vec
     vec3 L1= origin;
     vec3 L2= destination;
 
-    // the parametric equation of the ^plane is : v = v0 + u (v1-v0) + v (v2-v0)
+    // the parametric equation of the plane is : v = v0 + u (v1-v0) + v (v2-v0)
     // where the line and the plane meet (intersect) v = L
     //   L1 + t a  = v0 + u b + v c 
     //   L1 - v0   = -t a + u b + v c
@@ -59,11 +59,15 @@ bool intersect(vec3 origin, vec3 destination, vec3 v0, vec3 v1, vec3 v2, out vec
 
     if( (t>1.0) || (t<0.0) )
         return false;
-    if( (u>1.0) || (u<0.0) )
+
+    float uv=u+v;
+    
+    if( (uv>1.0) || (u<0.0) )
         return false;
-    if( (v>1.0) || (v<0.0) )
+    if( (uv>1.0) || (v<0.0) )
         return false;
     point = L1 + t * a;
+
     return true;
 }
 
