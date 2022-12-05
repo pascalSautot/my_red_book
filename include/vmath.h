@@ -1025,7 +1025,22 @@ static inline mat4 perspective(float fovy, float aspect, float n, float f)
     float C = (2.0f * n * f) / (n - f);
 
     mat4 result;
+    // given matrix A= 
+    //    A  0  0  0
+    //    0  q  0  0
+    //    0  0  B -1
+    //    0  0  C  0
+    // (xp,yp, zp, wp) = A (x,y,z,w)
+    //  xp = A x
+    //  yp = q y
+    //  zp = B z - w
+    //  wp = C z
 
+    //  we can draw:
+    //  xp / wp = A x / C z
+    //  yp / wp = q y / C z
+    //  zp / wp = (B z - w) / C z
+    
     result[0] = vec4(A, 0.0f, 0.0f, 0.0f);
     result[1] = vec4(0.0f, q, 0.0f, 0.0f);
     result[2] = vec4(0.0f, 0.0f, B, -1.0f);

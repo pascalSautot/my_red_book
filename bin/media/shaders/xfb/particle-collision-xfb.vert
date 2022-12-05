@@ -16,11 +16,12 @@ uniform float time_step = 0.02;
 
 bool intersect(vec3 origin, vec3 destination, vec3 v0, vec3 v1, vec3 v2, out vec3 point)
 {
+    // the parametric equation of the line is : L= L1 + t (L2-L1)
     vec3 L1= origin;
     vec3 L2= destination;
 
-    // the parametric equation of the line is : L= L1 + t (L2-L1)
     // the parametric equation of the ^plane is : v = v0 + u (v1-v0) + v (v2-v0)
+    // where the line and the plane meet (intersect) v = L
     //   L1 + t a  = v0 + u b + v c 
     //   L1 - v0   = -t a + u b + v c
     // [ L1 - v0 ] = [ -a b c ][t,u,v]T 

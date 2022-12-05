@@ -302,7 +302,7 @@ void TransformFeedbackExample::BindDataArmadillo(void)
     const GLboolean normalize = false;
     const GLint att_type=GL_FLOAT;
     
-    // load armadillo mesh
+    // load armadillo mesh from VBM file
     armadillo_mesh.LoadFromVBM("media/armadillo_low.vbm", 0, 1, 2);
     const GLint vertex_count(armadillo_mesh.GetVertexCount());
 
@@ -362,14 +362,13 @@ void TransformFeedbackExample::ParticleCollisionDisplay(bool auto_redraw, float 
     {
         glUniform1f(particle_time_step_loc, time_step * 2000.0f);
     }
-
     prev_tick = tick;
 
-    //manage double buffer
+    //manage double buffer one as input the other to output updated position and velocity via the feedback transform
     const int vao_index= frame_count%2;
     const int vbo_index( vao_index==1 ? 0 : 1);
 
-    // use buffer to get pos and velocity
+    // use buffer to get position and velocity
     glBindVertexArray(particule_vao[vao_index]);
     glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, particule_vbo[vbo_index]); 
 
