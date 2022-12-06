@@ -1017,29 +1017,31 @@ static inline mat4 frustum(float left, float right, float bottom, float top, flo
     return result;
 }
 
-static inline mat4 perspective(float fovy, float aspect, float n, float f)
+// gluPerspective() like projection transformation
+static inline mat4 perspective(float fovy_deg_angle, float aspect, float n, float f)
 {
-    float q = 1.0f / (float)tan(radians(0.5f * fovy));
+    float q = 1.0f / (float)tan(radians(0.5f * fovy_deg_angle));
     float A = q / aspect;
     float B = (n + f) / (n - f);
     float C = (2.0f * n * f) / (n - f);
 
+    // result is defined  by its 4 columns 
     mat4 result;
     // given matrix A= 
     //    A  0  0  0
     //    0  q  0  0
-    //    0  0  B -1
-    //    0  0  C  0
+    //    0  0  B  C
+    //    0  0 -1  0
     // (xp,yp, zp, wp) = A (x,y,z,w)
     //  xp = A x
     //  yp = q y
-    //  zp = B z - w
-    //  wp = C z
+    //  zp = B z + c w
+    //  wp = -z
 
     //  we can draw:
-    //  xp / wp = A x / C z
-    //  yp / wp = q y / C z
-    //  zp / wp = (B z - w) / C z
+    //  xp / wp =     - A x / z
+    //  yp / wp =     - q y / z
+    //  zp / wp = - B -   w / z
     
     result[0] = vec4(A, 0.0f, 0.0f, 0.0f);
     result[1] = vec4(0.0f, q, 0.0f, 0.0f);

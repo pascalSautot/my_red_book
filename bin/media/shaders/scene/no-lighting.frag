@@ -8,4 +8,4 @@ in vec4 vs_fs_color;
 void main(void)
 {
     color = vs_fs_color;
-};
+}

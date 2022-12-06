@@ -227,17 +227,16 @@ bool InstancingExample::FetchUniformVariables(GLint prog)
 {
     bool status(true);
 
-
-    ambiantColor_loc= glGetUniformLocation(armadillo_prog, "ambiantColor");
-    pointlightSourceColor_loc = glGetUniformLocation(armadillo_prog, "pointlightSourceColor");
-    pointLightSourcePosition_loc = glGetUniformLocation(armadillo_prog, "pointLightSourcePosition");
-    farLightSourceColor_loc = glGetUniformLocation(armadillo_prog, "farLightSourceColor");
-    farLightSourceDirection_loc = glGetUniformLocation(armadillo_prog, "farLightSourceDirection");
-    viewDirection_loc = glGetUniformLocation(armadillo_prog, "viewDirection");
+    ambiantColor_loc= glGetUniformLocation(prog, "ambiantColor");
+    pointlightSourceColor_loc = glGetUniformLocation(prog, "pointlightSourceColor");
+    pointLightSourcePosition_loc = glGetUniformLocation(prog, "pointLightSourcePosition");
+    farLightSourceColor_loc = glGetUniformLocation(prog, "farLightSourceColor");
+    farLightSourceDirection_loc = glGetUniformLocation(prog, "farLightSourceDirection");
+    viewDirection_loc = glGetUniformLocation(prog, "viewDirection");
     /*
-    halfWayDirection_loc = glGetUniformLocation(armadillo_prog, "halfWayDirection");
-    spotLightSourceColor_loc= glGetUniformLocation(armadillo_prog, "spotLightSourceColor");
-    spotLightSourceDirection_loc = glGetUniformLocation(armadillo_prog, "spotLightSourceDirection"); 
+    halfWayDirection_loc = glGetUniformLocation(prog, "halfWayDirection");
+    spotLightSourceColor_loc= glGetUniformLocation(prog, "spotLightSourceColor");
+    spotLightSourceDirection_loc = glGetUniformLocation(prog, "spotLightSourceDirection"); 
     */
 
     if(ambiantColor_loc == -1 ){
@@ -305,16 +304,15 @@ bool InstancingExample::InitArmadillo()
         farLightSourceDirection= vmath::vec3(1.0,1.0,0.5);  // expressed from the vertex 
 
         viewDirection=vmath::vec3(0.0, 0.0, -1.0);   // camera related 
+
+        // in the blinn phong relfection model a half vector is defined 
+        // as being half way between view and far light
+        // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model        
         halfWayDirection= vmath::normalize(viewDirection+farLightSourceDirection);
 
         spotLightSourceColor= vmath::vec4(0.0f, 0.0f, 1.0f, 1.0f); // blue
         spotLightSourceDirection = vmath::vec3(1.0,1.0,0.5); 
 
-        // in the blinn phong relfection model a half vector is defined 
-        // as being half way between view and far light
-        // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
-
-       
         FetchUniformVariables(armadillo_prog);
 
         if(status)
