@@ -1,5 +1,5 @@
 #version 440
-// update
+// update particules velocity and position
 
 uniform mat4 model_matrix;
 uniform mat4 projection_matrix;
@@ -79,6 +79,7 @@ vec3 reflect_vector(vec3 v, vec3 n)
 void main(void)
 {
     //predict particules' position as if there was no collision
+    //Accelerate in the -Y direction
     vec3 accelleration = vec3(0.0, -0.3, 0.0);
     vec3 predicted_velocity = velocity + accelleration * time_step;
     vec4 predicted_position = position + vec4(predicted_velocity * time_step, 0.0);
@@ -101,14 +102,23 @@ void main(void)
         {
             vec3 bounce = normalize(cross(t_v1 - t_v0, t_v2 - t_v0));
             new_position = vec4(intersection + reflect_vector(predicted_position.xyz - intersection, bounce), 1.0);
-            new_velocity = 0.8 * reflect_vector(predicted_velocity, bounce);
+            new_velocity = 0.8*reflect_vector(predicted_velocity, bounce);
+            break;
         }
     }
-    if (new_position.y < -40.0)
+    //"recycle" particules below -40 for Y 
+    // mirror a reduce x coord (narrow the stream)
+    // reduce speed
+    float narrow_factor=0.1;
+    vec3 reduced_speed= vec3(0.2, 0.1, -0.3);
+    float y_Th= -40.0;
+    if (new_position.y < y_Th)
     {
-        new_position = vec4(-new_position.x * 0.3, position.y + 80.0, 0.0, 1.0);
-        new_velocity *= vec3(0.2, 0.1, -0.3);
+        new_position = vec4(-new_position.x * narrow_factor, position.y + 2.0*y_Th, 0.0, 1.0);
+        new_velocity *= reduced_speed;
+;
     }
+    //slitgly reduce speed to form a narrower stream on the long run
     velocity_out = new_velocity * 0.9999;
     position_out = new_position;
     gl_Position = projection_matrix * (model_matrix * position);
