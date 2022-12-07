@@ -7,12 +7,16 @@ uniform int triangle_count;
 
 layout (location = 0) in vec4 position;
 layout (location = 1) in vec3 velocity;
+layout (location = 2) in vec4 color;
 
 layout (xfb_buffer = 0, xfb_offset=0) out vec4 position_out; // transform feedback 
 layout (xfb_buffer = 0, xfb_offset=16) out vec3 velocity_out; // transform feedback 
+layout (xfb_buffer = 0, xfb_offset=28) out vec4 color_out; // transform feedback 
 
 uniform samplerBuffer geometry_tbo; // a handle for accessing a buffer texture containing triangle vertices
 uniform float time_step = 0.02;
+
+out vec4 vs_fs_color;
 
 bool intersect(vec3 origin, vec3 destination, vec3 v0, vec3 v1, vec3 v2, out vec3 point)
 {
@@ -109,17 +113,20 @@ void main(void)
     //"recycle" particules below -40 for Y 
     // mirror a reduce x coord (narrow the stream)
     // reduce speed
-    float narrow_factor=0.1;
+    float narrow_factor=0.3;
     vec3 reduced_speed= vec3(0.2, 0.1, -0.3);
     float y_Th= -40.0;
     if (new_position.y < y_Th)
     {
-        new_position = vec4(-new_position.x * narrow_factor, position.y + 2.0*y_Th, 0.0, 1.0);
+        new_position = vec4(-new_position.x * narrow_factor, position.y + 2.0*y_Th, (position.x+position.y+position.z)/30.0, 1.0);
         new_velocity *= reduced_speed;
 ;
     }
     //slitgly reduce speed to form a narrower stream on the long run
     velocity_out = new_velocity * 0.9999;
     position_out = new_position;
+    color_out= vec4(vec3(color*min(1.0,(1.0 - gl_Position.z ))),1.0);
     gl_Position = projection_matrix * (model_matrix * position);
+    gl_PointSize = (1.0 - gl_Position.z / gl_Position.w) * gl_PointSize;
+    vs_fs_color = color;
 }
