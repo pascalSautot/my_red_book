@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <iostream>
 
+
 BEGIN_APP_DECLARATION(TransformFeedbackExample)
     // Override functions from base class
     virtual void Initialize(const char * title);
@@ -25,6 +26,7 @@ BEGIN_APP_DECLARATION(TransformFeedbackExample)
     typedef struct  {
         vmath::vec4 position;
         vmath::vec3 velocity;
+        vmath::vec4 color;
     } buffer_t;
 
     // Member variables
@@ -77,6 +79,17 @@ static inline float random_float()
     return (res - 1.0f);
 }
 
+template <typename Vector> Vector t_random_vector(float minmag = 0.0f, float maxmag = 1.0f)
+{
+    Vector randomvec;
+    const GLuint  max_i=randomvec.size();
+    for(GLuint i=0;i<max_i;i++)
+        randomvec[i]=random_float() * 2.0f - 1.0f;
+    randomvec = normalize(randomvec);
+    randomvec *= (random_float() * (maxmag - minmag) + minmag);
+
+    return randomvec;
+}
 static vmath::vec3 random_vector(float minmag = 0.0f, float maxmag = 1.0f)
 {
     vmath::vec3 randomvec(random_float() * 2.0f - 1.0f, random_float() * 2.0f - 1.0f, random_float() * 2.0f - 1.0f);
@@ -85,7 +98,6 @@ static vmath::vec3 random_vector(float minmag = 0.0f, float maxmag = 1.0f)
 
     return randomvec;
 }
-
 GLboolean TransformFeedbackExample::CheckProg(GLuint prog, ShaderInfo *shaders)
 {
     GLboolean status=true;
@@ -241,7 +253,7 @@ void TransformFeedbackExample::Initialize(const char * title)
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
-    
+
     GLboolean status=InitParticleCollisionProg();
     status = status && InitArmadilloProg();
     if(!status) 
@@ -255,7 +267,7 @@ void TransformFeedbackExample::Initialize(const char * title)
 }
 void TransformFeedbackExample::BindParticleCollision(void)
 {
-    enum { positionId=0, velocityId=1};
+    enum { positionId=0, velocityId=1, colorId=2};
 
     glGenVertexArrays(2, particule_vao);
     glGenBuffers(2, particule_vbo); // particules' position and velocity  
@@ -263,6 +275,7 @@ void TransformFeedbackExample::BindParticleCollision(void)
     const GLsizei buffer_t_size=sizeof(buffer_t); 
     const GLsizei position_size =4; // vec4
     const GLsizei velocity_size =3; // vec3
+    const GLsizei color_size =4 ; // vec4
     const GLboolean normalize = false;
     const GLsizei buffer_t_stride=buffer_t_size;
     const GLint att_type=GL_FLOAT;
@@ -270,6 +283,7 @@ void TransformFeedbackExample::BindParticleCollision(void)
     const GLsizeiptr points_size= point_count * (buffer_t_size);
     const vmath::vec3 particule_flow_direction=vmath::vec3(-0.5f, 40.0f, 0.0f);
     const GLuint position_offset=sizeof(vmath::vec4);
+    const GLuint velocity_offset=sizeof(vmath::vec3);
     const int vbo_count= sizeof(particule_vbo)/sizeof(particule_vbo[0]);
     GLboolean set_buffer_data=true;
 
@@ -282,9 +296,12 @@ void TransformFeedbackExample::BindParticleCollision(void)
             buffer_t * buffer = (buffer_t *)glMapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, GL_WRITE_ONLY);
             for (int j = 0; j < point_count; j++)
             {
-                buffer[j].velocity = random_vector();
+                buffer[j].velocity = t_random_vector<vmath::vec3>();
                 buffer[j].position = vmath::vec4(buffer[j].velocity + particule_flow_direction, 1.0f);
                 buffer[j].velocity = vmath::vec3(buffer[j].velocity[0], buffer[j].velocity[1] * 0.3f, buffer[j].velocity[2] * 0.3f);
+                buffer[j].color= t_random_vector<vmath::vec4>(0.1,0.2); 
+                for(int k=0;k<3;k++)buffer[j].color[k]=0.7f+buffer[j].color[k];
+                buffer[j].color[3]= 1.0;
             }
             glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
             set_buffer_data=false;
@@ -293,10 +310,18 @@ void TransformFeedbackExample::BindParticleCollision(void)
         //match located data for position and velocity in shader article-collision-xfb/particle-collision
         glBindVertexArray(particule_vao[i]);
         glBindBuffer(GL_ARRAY_BUFFER, particule_vbo[i]);
-        glVertexAttribPointer(positionId, position_size, att_type, normalize, buffer_t_stride, NULL); // position one set each buffer_t
-        glVertexAttribPointer(velocityId, velocity_size, att_type, normalize, buffer_t_stride, BUFFER_OFFSET(position_offset)); // velocity one set each buffer_t + offset for position (vec4)
+        //position
+        glVertexAttribPointer(positionId, 
+            position_size,  att_type, normalize, buffer_t_stride, NULL); 
         glEnableVertexAttribArray(positionId);
+        //velocity
+        glVertexAttribPointer(velocityId, 
+            velocity_size,  att_type, normalize, buffer_t_stride, BUFFER_OFFSET(position_offset)); 
         glEnableVertexAttribArray(velocityId);
+        //color
+        glVertexAttribPointer(colorId, 
+            color_size,     att_type, normalize, buffer_t_stride, BUFFER_OFFSET(position_offset+velocity_offset));         
+        glEnableVertexAttribArray(colorId);
     }
 }
 void TransformFeedbackExample::BindDataArmadillo(void)
@@ -382,6 +407,8 @@ void TransformFeedbackExample::ParticleCollisionDisplay(bool auto_redraw, float 
     //display as many points as frames displayed but no more than point_count
     const int c(frame_count >> 3);
     const int count( std::min(point_count, c));
+
+    glPointSize(4.0f);
     glDrawArrays(GL_POINTS, 0, count);
 
     glEndTransformFeedback();
@@ -398,8 +425,6 @@ void TransformFeedbackExample::Display(bool auto_redraw)
     vmath::mat4 projection_matrix(vmath::frustum(-1.0f, 1.0f, -aspect, aspect, 1.0f, 5000.0f) * vmath::translate(0.0f, 0.0f, -100.0f));
 
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-
 
     vmath::mat4 model_matrix(vmath::scale(0.3f) *
                              vmath::rotate(tick * 360.0f, 0.0f, 1.0f, 0.0f) *
