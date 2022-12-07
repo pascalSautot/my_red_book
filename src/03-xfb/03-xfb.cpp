@@ -238,6 +238,10 @@ void TransformFeedbackExample::Initialize(const char * title)
 {
     base::Initialize(title);
 
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    
     GLboolean status=InitParticleCollisionProg();
     status = status && InitArmadilloProg();
     if(!status) 
@@ -395,9 +399,7 @@ void TransformFeedbackExample::Display(bool auto_redraw)
 
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+
 
     vmath::mat4 model_matrix(vmath::scale(0.3f) *
                              vmath::rotate(tick * 360.0f, 0.0f, 1.0f, 0.0f) *
