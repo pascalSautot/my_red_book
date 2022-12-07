@@ -432,6 +432,14 @@ void CubeMapExample::Initialize(const char * title)
     camera_tz=  0.0f;
     torus_z= 0;     
     base::Initialize(title);
+
+    // Setup
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
+    glDepthFunc(GL_LEQUAL);
+    glDisable(GL_CULL_FACE);
+
     InitCubeMap();
     InitTorus();
     InitRef();
@@ -444,10 +452,7 @@ void CubeMapExample::ClearDisplay(void)
     glClearDepth(1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Setup
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glDisable(GL_CULL_FACE);
+
 }
 
 void CubeMapExample::Display(bool auto_redraw)

@@ -132,7 +132,9 @@ void MipmapExample::Initialize(const char * title)
 
     unsigned int * data = new unsigned int [64 * 64];
 
-    unsigned int colors[] = { 0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFF00FFFF, 0xFFFF00FF, 0xFFFFFF00, 0xFFFFFFFF };
+    unsigned int colors[] = { 
+        0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFF00FFFF, 0xFFFF00FF, 0xFFFFFF00, 0xFFFFFFFF 
+    };
 
     int i, j, k;
     int n;

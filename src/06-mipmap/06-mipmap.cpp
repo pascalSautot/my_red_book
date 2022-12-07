@@ -146,25 +146,31 @@ void MipmapExample::Initialize(const char * title)
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexStorage2D(GL_TEXTURE_2D, 7, GL_RGBA8, 64, 64);
 
+    const GLint nbCells=8;
     const GLint nbCells2=nbCells*nbCells;
-    unsigned int * data = new unsigned int [nbCells2];
-    const GLint levelCount=7
-    unsigned int colors[levelCount] = { 0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFF00FFFF, 0xFFFF00FF, 0xFFFFFF00, 0xFFFFFFFF };
+    const GLint nbCells4=nbCells2*nbCells2;
+    unsigned int * data = new unsigned int [nbCells4];
+    const GLint textureLevelCount=7;
+    unsigned int colors[textureLevelCount] = { 
+        0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFF00FFFF, 0xFFFF00FF, 0xFFFFFF00, 0xFFFFFFFF 
+    };
 
     GLint textureLevel, j;
-    const GLint ,x_offset=0,y_offset=0,nbCells=64;
-    for (textureLevel = 0; textureLevel < levelCount; textureLevel++)
+    const GLint x_offset=0,y_offset=0;
+    for (textureLevel = 0; textureLevel < textureLevelCount; textureLevel++)
     {
-        GLint texWidth= texHeigth= nbCells >> textureLevel;
-        for (j = 0; j < nbCells2; j++)
+        const GLint texWidth= (nbCells2 >> textureLevel);
+        const GLint texHeigth= texWidth;
+        for (j = 0; j < nbCells4; j++)
         {
-            data[j] = colors[i];
+            data[j] = colors[textureLevel];
         }
-        glTexSubImage2D(GL_TEXTURE_2D, textureLevel, x_offset, y_offset, texWidth,texWidth, GL_RGBA, GL_UNSIGNED_BYTE, data);       
+        glTexSubImage2D(GL_TEXTURE_2D, textureLevel, 
+            x_offset, y_offset, texWidth,texHeigth, 
+            GL_RGBA, GL_UNSIGNED_BYTE, data);       
     }
 
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, 4.5f);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 

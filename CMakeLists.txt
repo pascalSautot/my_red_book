@@ -63,6 +63,7 @@ set(EXAMPLES
   06-cubemap
   06-load-texture
   06-mipfilters
+  06-mipmap  
   06-multitexture
   06-statictexture
   06-texturewrapping
