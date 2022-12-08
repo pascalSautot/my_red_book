@@ -23,6 +23,8 @@ Mesh::~Mesh()
     if(m_vertex) delete [] m_vertex;
     if(m_color) delete [] m_color;
     if(m_normal) delete [] m_normal;
+    if(m_VAO)glDeleteVertexArrays(1, &m_VAO);
+    if(m_BO)glDeleteBuffers(1, &m_BO);    
 }
 
 
