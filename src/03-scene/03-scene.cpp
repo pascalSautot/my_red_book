@@ -48,6 +48,7 @@ BEGIN_APP_DECLARATION(InstancingExample)
     GLint a_view_matrix_loc,a_model_matrix_loc,a_projection_matrix_loc;
 
     // base planes and axes
+    GLboolean display_planes;
     SimpleObject ref_planes;
     GLuint ref_prog;
     GLint ref_view_matrix_loc,ref_model_matrix_loc,ref_projection_matrix_loc;
@@ -103,6 +104,7 @@ BEGIN_APP_DECLARATION(InstancingExample)
     enum { vPositionLoc=0, vNormalIndexLoc=1, vTextureLoc=2, vInstanceColorLoc=3};    
     
 protected:
+    void Init_Lights(void);
     virtual bool InitArmadillo(void);
     virtual bool InitRef(void);
     virtual bool InitSphere(void);
@@ -113,7 +115,10 @@ protected:
     virtual void DisplayArmadillo(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix, vmath::mat4 &projection_matrix);
     virtual void DisplaySphere(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix,  vmath::mat4 & projection_matrix);
     virtual void DisplayCylinder(bool auto_redraw, GLfloat t, vmath::mat4 &view_matrix,  vmath::mat4 & projection_matrix);
-    virtual bool InstancingExample::FetchUniformVariables(GLint prog);
+    virtual bool FetchUniformVariables(GLint prog);
+    virtual vmath::vec3 to_vec3(vmath::vec4& in);
+    virtual vmath::vec4 to_vec4(vmath::vec3& in, float w);
+
 END_APP_DECLARATION()
 
 DEFINE_APP(InstancingExample, "Instancing Example")
@@ -122,6 +127,18 @@ DEFINE_APP(InstancingExample, "Instancing Example")
 #define INSTANCE_COUNT 1
 
 #include "mesh.h"
+class AnyAxis : public mesh::YAxis
+{
+    public: 
+        AnyAxis():YAxis(){}
+        void setData(const GLfloat v[2][4], const GLfloat c[2][4])
+        {
+            push_data(v,c);
+            GLint buffer_size = sizeof(GLfloat)*m_nelem*m_ndim*2;
+            bind_data(buffer_size);            
+        }
+};
+AnyAxis pointLight_axis;
 mesh::XAxis x_axis;
 mesh::YAxis y_axis;
 mesh::ZAxis z_axis;
@@ -129,7 +146,19 @@ mesh::XYPlane xy_plane;
 mesh::YZPlane yz_plane;
 mesh::ZXPlane zx_plane;
 
-
+vmath::vec3 InstancingExample::to_vec3(vmath::vec4& in)
+{
+    vmath::vec3 out;
+    for(int i=0;i<2;i++)out[i]=in[i];
+    return out;
+}
+vmath::vec4 InstancingExample::to_vec4(vmath::vec3& in, float w)
+{
+    vmath::vec4 out;
+    for(int i=0;i<3;i++)out[i]=in[i];
+    out[3]=w;
+    return out;
+}
 bool InstancingExample::BuildShaders(ShaderInfo  *shaders, GLuint &prog,
     GLint &prog_model_matrix_loc, GLint &prog_view_matrix_loc, GLint &prog_projection_matrix_loc)
 {
@@ -165,6 +194,34 @@ bool InstancingExample::BuildShaders(ShaderInfo  *shaders, GLuint &prog,
     }
     return status;
 }
+void InstancingExample::Init_Lights(void)
+{
+    vmath::vec4 skyLight=vmath::vec4(190.0f/255.0f,255.0f/255.0f,240.0f/255.0f,1.0f);
+    vmath::vec4 sunLightMedium= vmath::vec4(238.0f/255.0f, 220.0f/255.0f, 165.0f/255.0f, 1.0f); 
+    vmath::vec4 sunLightBright= vmath::vec4(242.0f/255.0f, 169.0f/255.0f,  78.0f/255.0f, 1.0f); 
+
+    ambiantColor= skyLight;
+
+    vmath::vec4 redLight= vmath::vec4(1.0f, 0.0f, 0.0f, 1.0f); 
+    vmath::vec4 greenLight= vmath::vec4(0.0, 1.0f, 0.0f, 1.0f); 
+
+    pointlightSourceColor= greenLight; 
+    pointLightSourcePosition= vmath::vec4(1.5f,0.5f,1.5f,1.0);
+
+    farLightSourceColor= sunLightMedium; 
+    farLightSourceDirection= vmath::vec3(1.,0.,0.);  // expressed from the vertex 
+    farLightSourceDirection=vmath::normalize(farLightSourceDirection);
+
+    viewDirection=vmath::vec3(0.0, 0.0, -1.0);   // camera related 
+
+    // in the blinn phong relfection model a half vector is defined 
+    // as being half way between view and far light
+    // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model        
+    halfWayDirection= vmath::normalize(viewDirection+farLightSourceDirection);
+
+    spotLightSourceColor= vmath::vec4(0.0f, 0.0f, 1.0f, 1.0f); // blue
+    spotLightSourceDirection = vmath::vec3(1.0,1.0,0.5);     
+}
 void InstancingExample::Initialize(const char * title)
 {
     base::Initialize(title);
@@ -177,6 +234,7 @@ void InstancingExample::Initialize(const char * title)
     frustrum_z_near_plane=0.5f;
     frustrum_z_far_plane=5.0f;
 
+    Init_Lights();
     bool armadillo_status=InitArmadillo();
     bool ref_status=InitRef();
     bool s_status=InitSphere();
@@ -233,8 +291,8 @@ bool InstancingExample::FetchUniformVariables(GLint prog)
     farLightSourceColor_loc = glGetUniformLocation(prog, "farLightSourceColor");
     farLightSourceDirection_loc = glGetUniformLocation(prog, "farLightSourceDirection");
     viewDirection_loc = glGetUniformLocation(prog, "viewDirection");
-    /*
     halfWayDirection_loc = glGetUniformLocation(prog, "halfWayDirection");
+    /*
     spotLightSourceColor_loc= glGetUniformLocation(prog, "spotLightSourceColor");
     spotLightSourceDirection_loc = glGetUniformLocation(prog, "spotLightSourceDirection"); 
     */
@@ -263,11 +321,11 @@ bool InstancingExample::FetchUniformVariables(GLint prog)
         std::cout << "viewDirection not fetched in shader" << std::endl;
         status=false;
     }   
-    /*
     if(halfWayDirection_loc == -1 ){
         std::cout << "halfWayDirection not fetched in shader" << std::endl;
         status=false;
     }   
+    /*
     if(spotLightSourceColor_loc == -1 ){
         std::cout << "spotLightSourceColor not fetched in shader" << std::endl;
         status=false;
@@ -292,26 +350,7 @@ bool InstancingExample::InitArmadillo()
     bool status=InstancingExample::BuildShaders(shaders,armadillo_prog,a_model_matrix_loc,a_view_matrix_loc,a_projection_matrix_loc);
     if(status)
     {
-        ambiantColor= vmath::vec4(0.0f, 0.2f, 0.2f, 1.0f); // dark yellow
-        ambiantColor= vmath::vec4(0.2f, 0.2f, 0.2f, 1.0f); // dark 
 
-        pointlightSourceColor= vmath::vec4(1.0f, 0.0f, 0.0f, 1.0f); // blue
-        pointLightSourcePosition= vmath::vec4(0.f,1.5f,-camera_tz/5.0f,1.0);
-        pointLightSourcePosition= vmath::vec4(0.f,1.f,0.0f,1.0);
-
-        farLightSourceColor= vmath::vec4(0.1f,205.0/255.0,128.0/255.0,1.0f);  // sun shine color
-        farLightSourceColor= vmath::vec4(0.1f,0.1f,0.1f,1.0f);  // dark
-        farLightSourceDirection= vmath::vec3(1.0,1.0,0.5);  // expressed from the vertex 
-
-        viewDirection=vmath::vec3(0.0, 0.0, -1.0);   // camera related 
-
-        // in the blinn phong relfection model a half vector is defined 
-        // as being half way between view and far light
-        // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model        
-        halfWayDirection= vmath::normalize(viewDirection+farLightSourceDirection);
-
-        spotLightSourceColor= vmath::vec4(0.0f, 0.0f, 1.0f, 1.0f); // blue
-        spotLightSourceDirection = vmath::vec3(1.0,1.0,0.5); 
 
         FetchUniformVariables(armadillo_prog);
 
@@ -331,9 +370,11 @@ bool InstancingExample::InitArmadillo()
                 float b = float(n) / 5.0f;
                 float c = float(n) / 6.0f;
 
-                colors[n][0] = 0.5f * (sinf(a + 1.0f) + 1.0f);
-                colors[n][1] = 0.5f * (sinf(b + 2.0f) + 1.0f);
-                colors[n][2] = 0.5f * (sinf(c + 3.0f) + 1.0f);
+                for(int i=0;i<3;i++)colors[n][i] = 0.5f * (cosf(a + 1.0f) + 1.0f);
+                /*
+                colors[n][1] = 0.5f * (cosf(b + 2.0f) + 1.0f);
+                colors[n][2] = 0.5f * (cosf(c + 3.0f) + 1.0f);
+                */
                 colors[n][3] = 1.0f;
             }
 
@@ -354,6 +395,7 @@ bool InstancingExample::InitArmadillo()
 }
 bool InstancingExample::InitRef(void)
 {
+    display_planes=false;
     ShaderInfo  shaders[] =
     {
         { GL_VERTEX_SHADER, "media/shaders/scene/model_view_transform.vert" },
@@ -365,6 +407,14 @@ bool InstancingExample::InitRef(void)
         ref_prog,ref_model_matrix_loc,ref_view_matrix_loc,ref_projection_matrix_loc);    
 
     if(status){
+        GLfloat v[2][4];
+        for(int i=0;i<4;i++)v[0][i]= pointLightSourcePosition[i];
+        for(int i=0;i<4;i++)v[1][i]= 0.0f; v[1][3]=1.0;
+        GLfloat c[2][4];
+        for(int j=0;j<2;j++)
+            for(int i=0;i<4;i++)v[j][i]= pointlightSourceColor[i];
+
+        pointLight_axis.setData(v,c);
         x_axis.setData();
         y_axis.setData();
         z_axis.setData();
@@ -401,7 +451,7 @@ bool InstancingExample::InitSphere()
     if(status){
         sphere_light.setColor(pointlightSourceColor);
         sphere_light.setPosition(pointLightSourcePosition);
-        sphere_light.setRadius(0.25f); //1.0f/16.0f);
+        sphere_light.setRadius(0.125f); 
         sphere_light.setData();
     }
 
@@ -474,22 +524,23 @@ void InstancingExample::DisplayArmadillo(
     glUniform4fv(pointlightSourceColor_loc,1,pointlightSourceColor);
     glUniform4fv(farLightSourceColor_loc,1,farLightSourceColor);
 
-    //glUniform3fv(halfWayDirection_loc,1,halfWayDirection);
-
     float tt= (3000.0f*t);
 
     const VBM_BOUNDING_BOX & bb= object.BoundingBox();
     const float l(bb.max[1]-bb.min[1]);
     //const float scale=(bb.l_max!=0 ? 1.0f/bb.l_max : 1.0f);
-    const float scale=(l!=0 ? 1.0f/l : 1.0f);
+    const float scale1=(l!=0 ? 1.0f/l : 1.0f);
+    const float scale2=scale1/2.0;
+    const float scale4=scale1/4.0;
+    const float scale=scale1;
 
     // Set four model matrices
     vmath::mat4 model_matrix=vmath::mat4::identity();
     //const float tx(scale*(bb.max[0]-bb.min[0]));
-    const float tx(1.0);
+    const float tx(0.5);
     const float ty(std::abs(scale*bb.min[1]));
     //const float tz(scale*(bb.max[2]-bb.min[2]));
-    const float tz(1.0);
+    const float tz(tx);
 
     model_matrix =  vmath::translate(tx, ty, tz) *
                     vmath::rotate( 10*tt+0.0f , 0.0f, 1.0f, 0.0f) * 
@@ -516,19 +567,22 @@ void InstancingExample::DisplayArmadillo(
     for(int i =0;i<3;i++) eye[i]= eye[i]  - at[i];
     view_matrix =  vmath::lookat(eye,at,up);*/
 
-    vmath::vec4 pLSP= pointLightSourcePosition * view_matrix;
-    vmath::vec4 fLSD= { farLightSourceDirection[0], farLightSourceDirection[1], farLightSourceDirection[2], 0.0f};
-    fLSD= fLSD * view_matrix;
-    vmath::vec3 fLSD3;
-    for(int k=0;k<3;k++)fLSD3[k]=fLSD[k];
-
-    vmath::vec4 vD= { viewDirection[0], viewDirection[1], viewDirection[2], 0.0f};
-    vD= vD * view_matrix;
-    vmath::vec3 vD3;
-    for(int k=0;k<3;k++)vD3[k]=vD[k];
-
+    vmath::vec4 pLSP= -pointLightSourcePosition * view_matrix;
     glUniform4fv(pointLightSourcePosition_loc,1,pLSP);
+
+    vmath::vec4 fLSD=to_vec4(farLightSourceDirection,0);
+    fLSD= fLSD * view_matrix;
+    vmath::vec3 fLSD3=to_vec3(fLSD);
     glUniform3fv(farLightSourceDirection_loc,1,fLSD3);
+
+    vmath::vec4 hWD=to_vec4(halfWayDirection,0);
+    hWD= hWD * view_matrix;
+    vmath::vec3 hWD3=to_vec3(hWD);
+    glUniform3fv(halfWayDirection_loc,1,hWD3);
+
+    vmath::vec4 vD=to_vec4(viewDirection,0);
+    vD= vD * view_matrix;
+    vmath::vec3 vD3=to_vec3(vD);   
     glUniform3fv(viewDirection_loc,1,vD3);
 /*
     glUniform4fv(pointLightSourcePosition_loc,1,pLSP);
@@ -613,13 +667,18 @@ void InstancingExample::DisplayRef(bool auto_redraw, float t, vmath::mat4 &view_
     glUniformMatrix4fv(ref_projection_matrix_loc, 1, GL_FALSE, projection_matrix);
 
     //render axes
+    pointLight_axis.render();
     x_axis.render();
     y_axis.render();
     z_axis.render();
     // render planes
-    xy_plane.render();
-    yz_plane.render();
-    zx_plane.render();     
+    if(display_planes)
+    {
+        xy_plane.render();
+        yz_plane.render();
+        zx_plane.render();         
+    }
+   
 
     glUseProgram(0);
 }
@@ -632,13 +691,14 @@ void InstancingExample::Display(bool auto_redraw)
 
     const float view_angle(5.0f); // slightly tilt the scene to view all 3 planes
 
-    vmath::mat4 top_view_matrix =   vmath::rotate(90.0f, 1.0f, 0.0f, 0.0f)*
+    vmath::mat4 top_view_matrix =   vmath::translate(0.0f,0.0f,0.5f) *
+                                    vmath::rotate(90.0f, 1.0f, 0.0f, 0.0f)*
                                     vmath::rotate(-tt/2.0f, 0.0f, 1.0f, 0.0f) *
                                     vmath::rotate(view_angle, 1.0f, 0.0f, 0.0f) *
                                     vmath::rotate(-view_angle, 0.0f, 1.0f, 1.0f) ;  
 
     vmath::mat4 side_view_matrix =   
-                                vmath::rotate(-tt/2.0f, 0.0f, 1.0f, 0.0f) *
+                                vmath::rotate(-45.0f-tt/2.0f, 0.0f, 1.0f, 0.0f) *
                                 vmath::rotate(view_angle, 1.0f, 0.0f, 0.0f) *
                                 vmath::rotate(-view_angle, 0.0f, 1.0f, 1.0f);  // rotate around Y axis
     
@@ -653,7 +713,8 @@ void InstancingExample::Display(bool auto_redraw)
             frustrum_z_near_plane,frustrum_z_far_plane) * 
         vmath::translate(camera_tx,camera_ty,camera_tz);   
 
-    vmath::mat4 &view_matrix= top_view_matrix;
+    vmath::mat4 &view_matrix= side_view_matrix;
+    //vmath::mat4 &view_matrix= top_view_matrix;
     DisplayArmadillo(   auto_redraw,t,view_matrix,projection_matrix);
     DisplayRef(         auto_redraw,t,view_matrix,projection_matrix);
     DisplaySphere(      auto_redraw,t,view_matrix,projection_matrix);
