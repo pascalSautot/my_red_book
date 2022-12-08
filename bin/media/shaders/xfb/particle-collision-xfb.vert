@@ -110,10 +110,11 @@ void main(void)
             break;
         }
     }
+    float slowdow_factor=0.9999;
     //"recycle" particules below -40 for Y 
     // mirror a reduce x coord (narrow the stream)
     // reduce speed
-    float narrow_factor=0.3;
+    float narrow_factor=0.3*slowdow_factor;
     vec3 reduced_speed= vec3(0.2, 0.1, -0.3);
     float y_Th= -40.0;
     if (new_position.y < y_Th)
@@ -123,7 +124,7 @@ void main(void)
 ;
     }
     //slitgly reduce speed to form a narrower stream on the long run
-    velocity_out = new_velocity * 0.9999;
+    velocity_out = new_velocity * slowdow_factor;
     position_out = new_position;
     color_out= vec4(vec3(color*min(1.0,(1.0 - gl_Position.z ))),1.0);
     gl_Position = projection_matrix * (model_matrix * position);
