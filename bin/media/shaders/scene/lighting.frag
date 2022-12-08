@@ -18,35 +18,39 @@ in vec4 vs_fs_color;
 
 void main(void)
 {
-    vec3 direction= vec3(pointLightSourcePosition)-vec3(vertex_position);
-    float distance =  length(direction);
+    vec3 x=halfWayDirection;
+    vec3 normal= normalize(vs_fs_normal);
 
-    if(distance!=0)direction= direction / distance;
-
-/*
-    const float spotCosCutOff = 0.99f;
-    float spotCos = dot(direction,-spotLightSourceDirection);
-    float spotColorAttenuation = 1.0;
-    if(spotCos < spotCosCutOff)
-        spotColorAttenuation = 0.0;
-*/
-    // in lambertian reflection the light source is so far that all light rays have the same direction.
-    // The direction is expressed oriented from the vertex stemming out of the mesh
-    vec3 normal= vs_fs_normal;
-    float diffuse_coef= max(0.0, dot(normal,farLightSourceDirection));
-
-    float c1=0.5f,c2=1.0f,c3=1.f;
-    float attenuation_coef= 1.0/( c1 + c2*distance + c3*pow(distance,2) );    
-
-    float specular_reflection= max(0.0, dot(normal,halfWayDirection)); // Blinn Phong model - half is middle view and far light
-
-    float shininess=40.0;
-    if(diffuse_coef==0) specular_reflection= 0.0;
-    else specular_reflection= pow(specular_reflection,shininess);
+    vec3 direction= vec3(vertex_position)-vec3(pointLightSourcePosition);
+    direction= normalize(direction);
     
-    vec4 lambertian_reflection =   ambiantColor + farLightSourceColor * diffuse_coef;  
-    vec4 reflected_light = farLightSourceColor * specular_reflection + pointlightSourceColor * attenuation_coef;
+    //Emissive model
+    vec4 Ki=vs_fs_color; 
+    FragColor = Ki; //the most simple model
+    //Ambiant model
+    vec4 Ka=FragColor; 
+    vec4 Ia=ambiantColor; 
+    vec4 Emissivecolor=  Ia*Ka; 
 
-    FragColor = min((vs_fs_color * lambertian_reflection  + reflected_light ) , vec4(1.0));
+    //directionnal light (far and diffuse over the object surface)
+    vec4 If=farLightSourceColor;
+    vec4 Kd=vs_fs_color;
+    vec3 N=normal;
+    vec3 L= normalize(farLightSourceDirection);
+    float Fatt= 1.0/5.0;
+    vec4 FarDiffuseColor = Emissivecolor + Fatt*If*Kd*dot(N,L);
+
+    // specular refelxion
+    float shininess=10.0f;
+    vec3 PS=normalize(direction);
+    float shine= pow(dot(normal,PS),shininess); // Blinn Phong model - half is middle view and far light
+    vec4 Ip=pointlightSourceColor;
+
+    //vec4 SpecularColor= normalize(Ip*dot(direction,N)*shine);
+    vec4 SpecularColor= Ip*shine;
+    SpecularColor= FarDiffuseColor + SpecularColor;
+
+    //FragColor = min(FarDiffuseColor,vec4(1.0)); 
+    FragColor = min(SpecularColor,vec4(1.0)); 
 
 }
