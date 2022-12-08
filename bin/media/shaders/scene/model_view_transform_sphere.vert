@@ -37,6 +37,6 @@ void main(void)
 
     vec3 normal = normalize((model_view_matrix* vec4(vec3(normal), 0.0)).xyz);
     vs_fs_normal= vec3( model_view_matrix * vec4(vec3(normal),0.0));
-    vs_fs_color = instance_color;
+    vs_fs_color = instance_color*(0.8 + 0.2*cos(time));
     gl_Position = projection_matrix * model_view_matrix * pos;
 }
